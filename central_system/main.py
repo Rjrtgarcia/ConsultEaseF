@@ -194,6 +194,10 @@ class ConsultEaseApp:
         elif self.admin_dashboard_window and self.admin_dashboard_window.isVisible():
             current_window = self.admin_dashboard_window
 
+        # Force fullscreen mode directly
+        if self.fullscreen:
+            self.login_window.showFullScreen()
+
         # Use transition manager to handle the window change
         self.transition_manager.transition_to(
             from_window=current_window,
@@ -234,6 +238,10 @@ class ConsultEaseApp:
             faculties = self.faculty_controller.get_all_faculty()
             self.dashboard_window.populate_faculty_grid(faculties)
 
+        # Force fullscreen mode directly
+        if self.fullscreen:
+            self.dashboard_window.showFullScreen()
+
         # Use transition manager to handle the window change
         self.transition_manager.transition_to(
             from_window=current_window,
@@ -265,6 +273,10 @@ class ConsultEaseApp:
         elif self.admin_dashboard_window and self.admin_dashboard_window.isVisible():
             current_window = self.admin_dashboard_window
 
+        # Force fullscreen mode directly
+        if self.fullscreen:
+            self.admin_login_window.showFullScreen()
+
         # Use transition manager to handle the window change
         self.transition_manager.transition_to(
             from_window=current_window,
@@ -295,6 +307,10 @@ class ConsultEaseApp:
             current_window = self.dashboard_window
         elif self.admin_login_window and self.admin_login_window.isVisible():
             current_window = self.admin_login_window
+
+        # Force fullscreen mode directly
+        if self.fullscreen:
+            self.admin_dashboard_window.showFullScreen()
 
         # Use transition manager to handle the window change
         self.transition_manager.transition_to(
@@ -447,8 +463,13 @@ if __name__ == "__main__":
     # Configure RFID - enable simulation mode since we're on Raspberry Pi
     os.environ['RFID_SIMULATION_MODE'] = 'true'  # Enable if no RFID reader available
 
+    # Force fullscreen mode for Raspberry Pi deployment
+    os.environ['CONSULTEASE_FULLSCREEN'] = 'true'
+
     # Check if we're running in fullscreen mode
-    fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'false').lower() == 'true'
+    # Default to true for Raspberry Pi deployment
+    fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'true').lower() == 'true'
+    print(f"Fullscreen mode: {fullscreen}")
 
     # Start the application
     app = ConsultEaseApp(fullscreen=fullscreen)

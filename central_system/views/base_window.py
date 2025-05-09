@@ -199,10 +199,25 @@ class BaseWindow(QMainWindow):
         # The `fullscreen` flag is set by ConsultEaseApp
         if hasattr(self, 'fullscreen') and self.fullscreen:
             if not self.isFullScreen(): # Avoid toggling if already fullscreen
+                logger.info(f"Setting {self.__class__.__name__} to fullscreen mode in showEvent")
+                # Force fullscreen mode
+                self.showNormal()  # Reset window state first
                 self.showFullScreen()
+
+                # Use a timer to ensure fullscreen is applied
+                from PyQt5.QtCore import QTimer
+                QTimer.singleShot(100, self._ensure_fullscreen)
         # else:
         #     # This part might prevent manual toggling out of fullscreen if initial state was fullscreen
         #     # Let manual toggle handle exiting fullscreen
         #     pass
 
         super().showEvent(event)
+
+    def _ensure_fullscreen(self):
+        """Ensure window is in fullscreen mode if fullscreen flag is set."""
+        if hasattr(self, 'fullscreen') and self.fullscreen and not self.isFullScreen():
+            logger.info(f"Re-applying fullscreen mode to {self.__class__.__name__}")
+            self.showFullScreen()
+            self.activateWindow()
+            self.raise_()

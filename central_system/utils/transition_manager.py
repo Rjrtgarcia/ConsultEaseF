@@ -151,7 +151,11 @@ class TransitionManager(QObject):
             # For fullscreen windows, ensure they are in fullscreen mode
             if hasattr(to_window, 'fullscreen') and to_window.fullscreen:
                 logger.info(f"Setting {to_window.__class__.__name__} to fullscreen mode")
+                # Force fullscreen mode
+                to_window.showNormal()  # Reset window state first
                 to_window.showFullScreen()
+                # Double-check that fullscreen was applied
+                QTimer.singleShot(100, lambda: self._ensure_fullscreen(to_window))
             else:
                 logger.info(f"Showing {to_window.__class__.__name__} in normal mode")
 
@@ -183,7 +187,11 @@ class TransitionManager(QObject):
                 to_window.show()
                 if hasattr(to_window, 'fullscreen') and to_window.fullscreen:
                     logger.info(f"Setting {to_window.__class__.__name__} to fullscreen mode (error fallback)")
+                    # Force fullscreen mode
+                    to_window.showNormal()  # Reset window state first
                     to_window.showFullScreen()
+                    # Double-check that fullscreen was applied
+                    QTimer.singleShot(100, lambda: self._ensure_fullscreen(to_window))
                 else:
                     logger.info(f"Showing {to_window.__class__.__name__} in normal mode (error fallback)")
             except Exception as show_error:
@@ -201,6 +209,22 @@ class TransitionManager(QObject):
                 overlay_parent.hide()
         except Exception as e:
             logger.error(f"Error hiding overlay: {e}")
+
+    def _ensure_fullscreen(self, window):
+        """
+        Ensure a window is in fullscreen mode.
+
+        Args:
+            window: Window to check and set to fullscreen if needed
+        """
+        try:
+            if hasattr(window, 'fullscreen') and window.fullscreen and not window.isFullScreen():
+                logger.info(f"Re-applying fullscreen mode to {window.__class__.__name__}")
+                window.showFullScreen()
+                window.activateWindow()
+                window.raise_()
+        except Exception as e:
+            logger.error(f"Error ensuring fullscreen: {e}")
 
     def _direct_transition(self, from_window, to_window, prepare_func=None):
         """
@@ -225,7 +249,11 @@ class TransitionManager(QObject):
         to_window.show()
         if hasattr(to_window, 'fullscreen') and to_window.fullscreen:
             logger.info(f"Setting {to_window.__class__.__name__} to fullscreen mode (direct transition)")
+            # Force fullscreen mode
+            to_window.showNormal()  # Reset window state first
             to_window.showFullScreen()
+            # Double-check that fullscreen was applied
+            QTimer.singleShot(100, lambda: self._ensure_fullscreen(to_window))
         else:
             logger.info(f"Showing {to_window.__class__.__name__} in normal mode (direct transition)")
 
