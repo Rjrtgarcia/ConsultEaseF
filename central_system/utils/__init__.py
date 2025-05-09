@@ -6,22 +6,23 @@ from .ui_components import (
     NotificationBanner, LoadingOverlay
 )
 from .security import Security
+from .transition_manager import TransitionManager
 
 __all__ = [
     # Keyboard handler
     'KeyboardHandler',
     'install_keyboard_handler',
-    
+
     # Stylesheet
     'get_dark_stylesheet',
     'get_light_stylesheet',
     'apply_stylesheet',
-    
+
     # Icons
     'IconProvider',
     'Icons',
     'initialize_icons',
-    
+
     # UI Components
     'ModernButton',
     'IconButton',
@@ -29,7 +30,10 @@ __all__ = [
     'ModernSearchBox',
     'NotificationBanner',
     'LoadingOverlay',
-    
+
+    # Transition
+    'TransitionManager',
+
     # Security
     'Security'
-] 
+]
