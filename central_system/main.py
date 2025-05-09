@@ -164,6 +164,13 @@ class ConsultEaseApp:
         self.faculty_controller.stop()
         self.consultation_controller.stop()
 
+        # Clean up transition manager
+        if hasattr(self, 'transition_manager'):
+            try:
+                self.transition_manager.cleanup()
+            except Exception as e:
+                logger.error(f"Error cleaning up transition manager: {e}")
+
     def show_login_window(self):
         """
         Show the login window.
