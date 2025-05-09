@@ -110,6 +110,9 @@ class ConsultEaseApp:
         # Create transition manager for smooth window transitions
         self.transition_manager = TransitionManager()
 
+        # Store fullscreen preference for use in window creation
+        self.fullscreen = fullscreen
+
         # Start controllers
         self.rfid_controller.start()
         self.rfid_controller.register_callback(self.handle_rfid_scan)
@@ -122,9 +125,6 @@ class ConsultEaseApp:
 
         # Show login window
         self.show_login_window()
-
-        # Store fullscreen preference for use in window creation
-        self.fullscreen = fullscreen
 
     def _get_theme_preference(self):
         """
@@ -173,8 +173,10 @@ class ConsultEaseApp:
             self.login_window = LoginWindow()
             self.login_window.student_authenticated.connect(self.handle_student_authenticated)
             self.login_window.change_window.connect(self.handle_window_change)
-            # Set fullscreen flag
-            self.login_window.fullscreen = self.fullscreen
+
+        # Always set fullscreen flag (in case it changed)
+        self.login_window.fullscreen = self.fullscreen
+        logger.info(f"Setting login window fullscreen mode: {self.fullscreen}")
 
         # Determine current active window
         current_window = None
@@ -203,11 +205,13 @@ class ConsultEaseApp:
             self.dashboard_window = DashboardWindow(student)
             self.dashboard_window.change_window.connect(self.handle_window_change)
             self.dashboard_window.consultation_requested.connect(self.handle_consultation_request)
-            # Set fullscreen flag
-            self.dashboard_window.fullscreen = self.fullscreen
         else:
             # Update student info if needed
             self.dashboard_window.student = student
+
+        # Always set fullscreen flag (in case it changed)
+        self.dashboard_window.fullscreen = self.fullscreen
+        logger.info(f"Setting dashboard window fullscreen mode: {self.fullscreen}")
 
         # Determine current active window
         current_window = None
@@ -240,8 +244,10 @@ class ConsultEaseApp:
             self.admin_login_window = AdminLoginWindow()
             self.admin_login_window.admin_authenticated.connect(self.handle_admin_authenticated)
             self.admin_login_window.change_window.connect(self.handle_window_change)
-            # Set fullscreen flag
-            self.admin_login_window.fullscreen = self.fullscreen
+
+        # Always set fullscreen flag (in case it changed)
+        self.admin_login_window.fullscreen = self.fullscreen
+        logger.info(f"Setting admin login window fullscreen mode: {self.fullscreen}")
 
         # Determine current active window
         current_window = None
@@ -269,8 +275,10 @@ class ConsultEaseApp:
             self.admin_dashboard_window.change_window.connect(self.handle_window_change)
             self.admin_dashboard_window.faculty_updated.connect(self.handle_faculty_updated)
             self.admin_dashboard_window.student_updated.connect(self.handle_student_updated)
-            # Set fullscreen flag
-            self.admin_dashboard_window.fullscreen = self.fullscreen
+
+        # Always set fullscreen flag (in case it changed)
+        self.admin_dashboard_window.fullscreen = self.fullscreen
+        logger.info(f"Setting admin dashboard window fullscreen mode: {self.fullscreen}")
 
         # Determine current active window
         current_window = None
