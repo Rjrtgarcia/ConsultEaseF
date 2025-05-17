@@ -188,6 +188,41 @@ class DatabaseService:
         query = sql.SQL("SELECT student_id, rfid_tag, name, department, created_at FROM students ORDER BY name;")
         return self._execute_query(query, fetch_all=True)
 
+    def update_student(self, student_id: int, rfid_tag: str, name: str, department: str = None):
+        """Updates an existing student's details in the database."""
+        query = sql.SQL("""
+            UPDATE students
+            SET rfid_tag = %s, name = %s, department = %s, updated_at = %s
+            WHERE student_id = %s
+            RETURNING student_id, rfid_tag, name, department, updated_at;
+        """)
+        try:
+            now = datetime.now()
+            return self._execute_query(query, (rfid_tag, name, department, now, student_id), fetch_one=True, commit=True)
+        except psycopg2.IntegrityError as e: # Catch issues like duplicate RFID tag on update
+            logging.error(f"Error updating student ID {student_id} due to integrity constraint: {e}")
+            return None
+        except Exception as e:
+            logging.error(f"Error updating student ID {student_id}: {e}")
+            return None
+
+    def delete_student(self, student_id: int):
+        """Deletes a student from the database. Returns True on success, False otherwise."""
+        # Note: ON DELETE CASCADE for consultations related to this student is handled by the DB schema.
+        query = sql.SQL("DELETE FROM students WHERE student_id = %s;")
+        try:
+            self._execute_query(query, (student_id,), commit=True) # No RETURNING needed for simple delete
+            # To confirm deletion, we could check if execute_query affected rows, but basic success is usually enough
+            # For simplicity, if no exception, assume success.
+            logging.info(f"Student with ID {student_id} deleted successfully.")
+            return True
+        except psycopg2.Error as e: # Specific psycopg2 errors, e.g. foreign key if not cascaded
+            logging.error(f"Database error deleting student ID {student_id}: {e}")
+            return False
+        except Exception as e:
+            logging.error(f"Unexpected error deleting student ID {student_id}: {e}")
+            return False
+
     # --- Faculty Management (MVP: Add and Get) ---
     def add_faculty(self, name: str, department: str, ble_identifier: str,
                     office_location: str = None, contact_details: str = None,
@@ -235,6 +270,42 @@ class DatabaseService:
         
         query = sql.SQL(query_string)
         return self._execute_query(query, tuple(params) if params else None, fetch_all=True)
+
+    def update_faculty_details(self, faculty_id: int, name: str, department: str, 
+                               ble_identifier: str, office_location: str = None, 
+                               contact_details: str = None):
+        """Updates an existing faculty member's details (excluding status)."""
+        query = sql.SQL("""
+            UPDATE faculty 
+            SET name = %s, department = %s, ble_identifier = %s, 
+                office_location = %s, contact_details = %s, updated_at = %s
+            WHERE faculty_id = %s
+            RETURNING faculty_id, name, department, ble_identifier, office_location, contact_details, updated_at;
+        """)
+        try:
+            now = datetime.now()
+            return self._execute_query(query, (name, department, ble_identifier, office_location, contact_details, now, faculty_id), fetch_one=True, commit=True)
+        except psycopg2.IntegrityError as e: # Catch issues like duplicate BLE ID
+            logging.error(f"Error updating faculty ID {faculty_id} due to integrity constraint: {e}")
+            return None
+        except Exception as e:
+            logging.error(f"Error updating faculty details for ID {faculty_id}: {e}")
+            return None
+
+    def delete_faculty(self, faculty_id: int):
+        """Deletes a faculty member from the database. Returns True on success, False otherwise."""
+        # Note: ON DELETE CASCADE for consultations related to this faculty is handled by the DB schema.
+        query = sql.SQL("DELETE FROM faculty WHERE faculty_id = %s;")
+        try:
+            self._execute_query(query, (faculty_id,), commit=True)
+            logging.info(f"Faculty with ID {faculty_id} deleted successfully.")
+            return True
+        except psycopg2.Error as e:
+            logging.error(f"Database error deleting faculty ID {faculty_id}: {e}")
+            return False
+        except Exception as e:
+            logging.error(f"Unexpected error deleting faculty ID {faculty_id}: {e}")
+            return False
 
     def update_faculty_status(self, faculty_id: int, new_status: str):
         """Updates the status of a faculty member."""
@@ -307,6 +378,25 @@ class DatabaseService:
         
         query = sql.SQL(query_string)
         return self._execute_query(query, tuple(params), fetch_all=True)
+
+    def get_all_consultations_with_details(self):
+        """Retrieves all consultation requests with student and faculty names."""
+        query = sql.SQL("""
+            SELECT 
+                c.consultation_id, c.student_id, s.name as student_name, 
+                c.faculty_id, f.name as faculty_name,
+                c.course_code, c.subject, c.request_details, c.status, 
+                c.requested_at, c.updated_at
+            FROM consultations c
+            JOIN students s ON c.student_id = s.student_id
+            JOIN faculty f ON c.faculty_id = f.faculty_id
+            ORDER BY c.requested_at DESC;
+        """)
+        try:
+            return self._execute_query(query, fetch_all=True)
+        except Exception as e:
+            logging.error(f"Error retrieving all consultations with details: {e}")
+            return []
 
     def update_consultation_status(self, consultation_id: int, new_status: str):
         """Updates the status of a consultation request."""

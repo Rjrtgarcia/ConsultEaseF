@@ -84,4 +84,102 @@ class AdminController(QObject):
             # QMessageBox.warning(self.admin_view, "Load Error", "Could not load faculty list.")
 
     def cleanup(self):
-        logging.info("AdminController cleaned up.") 
+        logging.info("AdminController cleaned up.")
+
+    # --- Student Management --- #
+    def get_all_students(self):
+        try:
+            return self.db_service.get_all_students()
+        except Exception as e:
+            logging.error(f"AdminController: Error getting all students: {e}")
+            return []
+
+    def add_student(self, rfid_tag, name, department):
+        try:
+            student = self.db_service.add_student(rfid_tag, name, department)
+            if student:
+                logging.info(f"AdminController: Student added: {name} ({rfid_tag})")
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"AdminController: Error adding student {name}: {e}")
+            return False
+
+    def update_student(self, student_id, rfid_tag, name, department):
+        try:
+            # The DatabaseService needs an update_student method
+            # For now, let's assume it will exist and work similarly to add_student or faculty update
+            student = self.db_service.update_student(student_id, rfid_tag, name, department)
+            if student:
+                logging.info(f"AdminController: Student updated: ID {student_id}")
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"AdminController: Error updating student ID {student_id}: {e}")
+            return False
+
+    def delete_student(self, student_id):
+        try:
+            # The DatabaseService needs a delete_student method
+            if self.db_service.delete_student(student_id):
+                logging.info(f"AdminController: Student deleted: ID {student_id}")
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"AdminController: Error deleting student ID {student_id}: {e}")
+            # Could be due to foreign key constraints (consultations)
+            return False
+
+    # --- Faculty Management --- #
+    def get_all_faculty(self):
+        try:
+            return self.db_service.get_all_faculty()
+        except Exception as e:
+            logging.error(f"AdminController: Error getting all faculty: {e}")
+            return []
+
+    def add_faculty(self, name, department, ble_identifier, office_location=None, contact_details=None):
+        try:
+            faculty = self.db_service.add_faculty(name, department, ble_identifier, office_location, contact_details)
+            if faculty:
+                logging.info(f"AdminController: Faculty added: {name}")
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"AdminController: Error adding faculty {name}: {e}")
+            return False
+
+    def update_faculty(self, faculty_id, name, department, ble_identifier, office_location=None, contact_details=None):
+        try:
+            # The DatabaseService needs an update_faculty method that can update all these fields
+            # The current one `update_faculty_status` is only for status.
+            # Let's assume a more general `update_faculty_details` or similar exists / will be added.
+            faculty = self.db_service.update_faculty_details(faculty_id, name, department, ble_identifier, office_location, contact_details)
+            if faculty:
+                logging.info(f"AdminController: Faculty updated: ID {faculty_id}")
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"AdminController: Error updating faculty ID {faculty_id}: {e}")
+            return False
+
+    def delete_faculty(self, faculty_id):
+        try:
+            # The DatabaseService needs a delete_faculty method
+            if self.db_service.delete_faculty(faculty_id):
+                logging.info(f"AdminController: Faculty deleted: ID {faculty_id}")
+                return True
+            return False
+        except Exception as e:
+            logging.error(f"AdminController: Error deleting faculty ID {faculty_id}: {e}")
+            # Could be due to foreign key constraints (consultations)
+            return False
+
+    # --- Consultation Management --- #
+    def get_all_consultations(self):
+        try:
+            # This method in DatabaseService should join with student and faculty tables to get names
+            return self.db_service.get_all_consultations_with_details() 
+        except Exception as e:
+            logging.error(f"AdminController: Error getting all consultations: {e}")
+            return [] 
