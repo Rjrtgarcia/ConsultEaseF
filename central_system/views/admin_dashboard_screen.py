@@ -399,34 +399,33 @@ class AdminDashboardScreen(QWidget):
 
     # -------------------- Consultation Tab --------------------
     def _create_consultations_tab(self):
+        logger_admin_dash.info("AdminDashboardScreen: _create_consultations_tab() started.")
         consultation_tab = QWidget()
         layout = QVBoxLayout(consultation_tab)
         
         table_group = QGroupBox("All Consultation Requests")
         table_layout = QVBoxLayout()
         
-        self.consultation_table = self._create_table([
+        headers = [
             "ID", "Student Name (ID)", "Faculty Name (ID)", "Course Code", 
             "Subject", "Details", "Status", "Requested At", "Updated At"
-        ])
-        # Make consultation table wider for more details
-        self.consultation_table.setColumnWidth(0, 50) # ID
-        self.consultation_table.setColumnWidth(1, 200) # Student
-        self.consultation_table.setColumnWidth(2, 200) # Faculty
-        self.consultation_table.setColumnWidth(3, 100) # Course
-        self.consultation_table.setColumnWidth(4, 200) # Subject
-        self.consultation_table.setColumnWidth(5, 300) # Details
-        self.consultation_table.setColumnWidth(6, 100) # Status
-        self.consultation_table.setColumnWidth(7, 150) # Requested
-        self.consultation_table.setColumnWidth(8, 150) # Updated
+        ]
+        logger_admin_dash.info(f"AdminDashboardScreen: Creating consultation_table with headers: {headers}")
+        self.consultation_table = self._create_table(headers)
+        logger_admin_dash.info(f"AdminDashboardScreen: consultation_table created: {type(self.consultation_table)}")
         
+        # Make consultation table wider for more details (assuming _create_table doesn't do this)
+        # self.consultation_table.setColumnWidth(0, 50) # ID - _create_table might handle some default sizing
+
         self.consultation_refresh_button = QPushButton("Refresh List")
         self.consultation_refresh_button.clicked.connect(self.load_consultations_data)
 
         table_layout.addWidget(self.consultation_refresh_button)
         table_layout.addWidget(self.consultation_table)
         table_group.setLayout(table_layout)
-        layout.addWidget(table_group)
+        consultation_tab.setLayout(layout) # Set the layout for the consultation_tab widget itself
+        logger_admin_dash.info("AdminDashboardScreen: _create_consultations_tab() finished.")
+        return consultation_tab
 
     # -------------------- Data Loading Functions --------------------
     def load_all_data(self):
@@ -496,30 +495,43 @@ class AdminDashboardScreen(QWidget):
             # Potentially re-raise or handle more gracefully depending on desired app behavior
 
     def load_consultations_data(self):
-        consultations = self.admin_controller.get_all_consultations()
-        self.consultation_table.setRowCount(0)
-        if consultations:
-            for row_num, consult_data in enumerate(consultations):
-                self.consultation_table.insertRow(row_num)
-                self.consultation_table.setItem(row_num, 0, QTableWidgetItem(str(consult_data.get('consultation_id', ''))))
-                
-                student_info = f"{consult_data.get('student_name', 'N/A')} (ID: {consult_data.get('student_id', 'N/A')})"
-                self.consultation_table.setItem(row_num, 1, QTableWidgetItem(student_info))
-                
-                faculty_info = f"{consult_data.get('faculty_name', 'N/A')} (ID: {consult_data.get('faculty_id', 'N/A')})"
-                self.consultation_table.setItem(row_num, 2, QTableWidgetItem(faculty_info))
-                
-                self.consultation_table.setItem(row_num, 3, QTableWidgetItem(consult_data.get('course_code', '')))
-                self.consultation_table.setItem(row_num, 4, QTableWidgetItem(consult_data.get('subject', '')))
-                self.consultation_table.setItem(row_num, 5, QTableWidgetItem(consult_data.get('request_details', '')))
-                self.consultation_table.setItem(row_num, 6, QTableWidgetItem(consult_data.get('status', '')))
-                
-                requested_at = consult_data.get('requested_at')
-                self.consultation_table.setItem(row_num, 7, QTableWidgetItem(str(requested_at) if requested_at else ''))
-                updated_at = consult_data.get('updated_at')
-                self.consultation_table.setItem(row_num, 8, QTableWidgetItem(str(updated_at) if updated_at else ''))
-        # No resizeColumnsToContents here due to explicit widths, but ensure last section stretches.
-        self.consultation_table.horizontalHeader().setStretchLastSection(True)
+        logger_admin_dash.info("AdminDashboardScreen: load_consultations_data() started.")
+        try:
+            if not hasattr(self, 'consultation_table') or self.consultation_table is None:
+                logger_admin_dash.error("AdminDashboardScreen: consultation_table does not exist or is None before loading data!")
+                return
+            logger_admin_dash.info(f"AdminDashboardScreen: consultation_table type before setRowCount: {type(self.consultation_table)}")
+
+            consultations = self.admin_controller.get_all_consultations()
+            logger_admin_dash.info(f"AdminDashboardScreen: Fetched consultations list: {consultations is not None}")
+
+            logger_admin_dash.info("AdminDashboardScreen: Attempting self.consultation_table.setRowCount(0).")
+            self.consultation_table.setRowCount(0)
+            logger_admin_dash.info("AdminDashboardScreen: self.consultation_table.setRowCount(0) successful.")
+
+            if consultations:
+                for row_num, consult_data in enumerate(consultations):
+                    self.consultation_table.insertRow(row_num)
+                    self.consultation_table.setItem(row_num, 0, QTableWidgetItem(str(consult_data.get('consultation_id', ''))))
+                    student_info = f"{consult_data.get('student_name', 'N/A')} (ID: {consult_data.get('student_id', 'N/A')})"
+                    self.consultation_table.setItem(row_num, 1, QTableWidgetItem(student_info))
+                    faculty_info = f"{consult_data.get('faculty_name', 'N/A')} (ID: {consult_data.get('faculty_id', 'N/A')})"
+                    self.consultation_table.setItem(row_num, 2, QTableWidgetItem(faculty_info))
+                    self.consultation_table.setItem(row_num, 3, QTableWidgetItem(consult_data.get('course_code', '')))
+                    self.consultation_table.setItem(row_num, 4, QTableWidgetItem(consult_data.get('subject', '')))
+                    self.consultation_table.setItem(row_num, 5, QTableWidgetItem(consult_data.get('request_details', '')))
+                    self.consultation_table.setItem(row_num, 6, QTableWidgetItem(consult_data.get('status', '')))
+                    requested_at = consult_data.get('requested_at')
+                    self.consultation_table.setItem(row_num, 7, QTableWidgetItem(str(requested_at) if requested_at else ''))
+                    updated_at = consult_data.get('updated_at')
+                    self.consultation_table.setItem(row_num, 8, QTableWidgetItem(str(updated_at) if updated_at else ''))
+            
+            # self.consultation_table.resizeColumnsToContents() # This might be problematic if columns are very wide
+            # Instead, rely on _create_table settings or selective resize
+            self.consultation_table.horizontalHeader().setStretchLastSection(True)
+            logger_admin_dash.info("AdminDashboardScreen: load_consultations_data() successfully finished.")
+        except Exception as e:
+            logger_admin_dash.error(f"AdminDashboardScreen: CRITICAL ERROR in load_consultations_data(): {e}", exc_info=True)
 
 
 if __name__ == '__main__':
