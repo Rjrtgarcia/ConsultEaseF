@@ -119,10 +119,44 @@ class DatabaseService:
             self._execute_query(create_faculty_table_sql, commit=True)
             self._execute_query(create_consultations_table_sql, commit=True)
             logging.info("Database tables checked/created successfully.")
+            self._seed_initial_data() # Add call to seeding method
         except psycopg2.Error as e:
             logging.error(f"Error creating database tables: {e}")
             # If tables can't be created, the service is likely unusable.
             raise RuntimeError(f"Failed to create essential database tables: {e}")
+
+    def _seed_initial_data(self):
+        """Seeds the database with initial sample data if tables are empty."""
+        try:
+            # Check if students table is empty
+            if not self.get_all_students():
+                logging.info("Students table is empty. Seeding initial student data...")
+                self.add_student(
+                    rfid_tag="SIM_STU_001",
+                    name="John Doe (Sample)",
+                    department="Computer Science"
+                )
+                logging.info("Sample student added.")
+
+            # Check if faculty table is empty
+            if not self.get_all_faculty(): # Assuming get_all_faculty returns a list
+                logging.info("Faculty table is empty. Seeding initial faculty data...")
+                self.add_faculty(
+                    name="Dr. Jane Smith (Sample)",
+                    department="Software Engineering",
+                    ble_identifier="FAC_BLE_001_SAMPLE",
+                    office_location="Tech Park Room 101",
+                    contact_details="jane.smith@example.com",
+                    current_status="Available"
+                )
+                logging.info("Sample faculty added.")
+            
+            logging.info("Initial data seeding check complete.")
+
+        except Exception as e:
+            logging.error(f"Error during initial data seeding: {e}")
+            # Depending on the severity, you might want to raise this or just log it
+            # For now, just logging, as failure to seed might not be critical for app startup
 
     # --- Student Management ---
     def add_student(self, rfid_tag: str, name: str, department: str = None):
