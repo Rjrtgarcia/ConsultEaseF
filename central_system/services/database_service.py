@@ -129,14 +129,14 @@ class DatabaseService:
         """Seeds the database with initial sample data if tables are empty."""
         try:
             # Check if students table is empty
-            if not self.get_all_students():
-                logging.info("Students table is empty. Seeding initial student data...")
-                self.add_student(
-                    rfid_tag="SIM_STU_001",
-                    name="John Doe (Sample)",
-                    department="Computer Science"
-                )
-                logging.info("Sample student added.")
+            # if not self.get_all_students():
+            #     logging.info("Students table is empty. Seeding initial student data...")
+            #     self.add_student(
+            #         rfid_tag="SIM_STU_001",
+            #         name="John Doe (Sample)",
+            #         department="Computer Science"
+            #     )
+            #     logging.info("Sample student added.")
 
             # Check if faculty table is empty
             if not self.get_all_faculty(): # Assuming get_all_faculty returns a list
