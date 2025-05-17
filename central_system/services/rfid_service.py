@@ -34,6 +34,8 @@ class RFIDService:
         self._rfid_callback = None
         self._is_scanning = False
         self._scan_thread = None
+        self._original_rfid_callback = None # For single tag capture
+        self._is_in_capture_mode = False    # For single tag capture
         
         if not self.simulation_mode:
             if not PYSERIAL_AVAILABLE:
@@ -82,8 +84,53 @@ class RFIDService:
     def register_rfid_callback(self, callback):
         self._rfid_callback = callback
 
+    def start_capture_single_tag(self, capture_callback):
+        """Starts a special mode to capture a single RFID tag.
+
+        The provided capture_callback will be called once when a tag is scanned.
+        The service will then automatically revert to its previous callback.
+        """
+        if self._is_in_capture_mode:
+            logging.warning("Already in single tag capture mode. Ignoring new request.")
+            return
+        
+        logging.info("Starting single tag capture mode.")
+        self._is_in_capture_mode = True
+        self._original_rfid_callback = self._rfid_callback # Store current main callback
+        self._rfid_callback = capture_callback            # Set temporary capture callback
+
+        # Ensure scanning thread is active
+        if not self._is_scanning:
+            self.start_scanning() # This will use the new temporary _rfid_callback if it starts a new scan loop
+        elif self.simulation_mode and (not self._scan_thread or not self._scan_thread.is_alive()):
+            # If already "scanning" but thread died (can happen in sim if not daemon properly handled before)
+            self.start_scanning()
+        elif not self.simulation_mode and (not self.serial_conn or not self.serial_conn.is_open):
+            # If in actual mode but connection is bad, try to restart scanning which includes connection attempt
+            self.start_scanning()
+
+    def stop_capture_single_tag(self):
+        """Stops the single tag capture mode and restores the original callback."""
+        if not self._is_in_capture_mode:
+            return
+        logging.info("Stopping single tag capture mode.")
+        self._rfid_callback = self._original_rfid_callback
+        self._original_rfid_callback = None
+        self._is_in_capture_mode = False
+        # Note: This does not stop the physical scanning thread if an original callback existed.
+        # It just reverts who gets notified. The main start/stop_scanning manages the thread itself.
+
     def _notify_rfid_scanned(self, rfid_tag):
-        if self._rfid_callback:
+        if self._is_in_capture_mode:
+            # In capture mode, we call the current callback (which is the capture_callback)
+            # then immediately stop capture mode.
+            if self._rfid_callback:
+                try:
+                    self._rfid_callback(rfid_tag)
+                except Exception as e:
+                    logging.error(f"Error executing single capture RFID callback: {e}")
+            self.stop_capture_single_tag() # Automatically stop capture after one tag
+        elif self._rfid_callback: # Normal operation
             try:
                 self._rfid_callback(rfid_tag)
             except Exception as e:

@@ -1,50 +1,51 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel, QLineEdit,
                              QPushButton, QTableWidget, QTableWidgetItem, QMessageBox,
                              QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QAbstractItemView)
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QFont
 
 class AdminDashboardScreen(QWidget):
     # Signals for controller interaction if needed later, for now direct calls
     # e.g., request_load_students = pyqtSignal()
+    request_logout_from_admin_panel = pyqtSignal() # Signal to logout
 
-    def __init__(self, admin_controller):
-        super().__init__()
+    def __init__(self, admin_controller, main_dashboard_ref, parent=None):
+        super().__init__(parent)
         self.admin_controller = admin_controller
+        self.main_dashboard_ref = main_dashboard_ref # To refresh if needed
         self.setWindowTitle("Admin Dashboard - ConsultEase")
-        self.setGeometry(150, 150, 1200, 700) # Adjusted size
+        self.setGeometry(150, 150, 1000, 700)
+        self.setMinimumSize(800, 500)
         self._init_ui()
+        self._connect_signals()
+        self.load_all_data()
 
     def _init_ui(self):
-        main_layout = QVBoxLayout(self)
-        
-        # Title
-        title_label = QLabel("ConsultEase System Administration")
-        font = QFont()
-        font.setPointSize(16)
-        font.setBold(True)
-        title_label.setFont(font)
-        title_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title_label)
-
+        layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
-        main_layout.addWidget(self.tabs)
+        self.tabs.addTab(self._create_students_tab(), "Manage Students")
+        self.tabs.addTab(self._create_faculty_tab(), "Manage Faculty")
+        self.tabs.addTab(self._create_consultations_tab(), "View Consultations")
+        layout.addWidget(self.tabs)
 
-        # Create tabs
-        self.student_tab = QWidget()
-        self.faculty_tab = QWidget()
-        self.consultation_tab = QWidget()
+        # Add Logout Button
+        self.logout_button = QPushButton("Logout and Return to Login")
+        self.logout_button.clicked.connect(self.request_logout_from_admin_panel.emit)
+        # Add some styling or place it appropriately, e.g., in a bottom hbox
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(self.logout_button)
+        layout.addLayout(button_layout)
 
-        self.tabs.addTab(self.student_tab, "Manage Students")
-        self.tabs.addTab(self.faculty_tab, "Manage Faculty")
-        self.tabs.addTab(self.consultation_tab, "View Consultations")
+        self.setLayout(layout)
 
-        # Setup each tab
-        self._setup_student_tab()
-        self._setup_faculty_tab()
-        self._setup_consultation_tab()
-
-        self.load_all_data() # Initial data load
+    def _connect_signals(self):
+        # Connect signals from controller to update tables
+        self.admin_controller.students_data_changed.connect(self.load_students_data)
+        self.admin_controller.faculty_data_changed.connect(self.load_faculty_data)
+        self.admin_controller.consultations_data_changed.connect(self.load_consultations_data)
+        # Connect signal from controller for RFID tag scanned for new student
+        self.admin_controller.rfid_tag_scanned_for_student.connect(self.update_rfid_tag_entry_for_new_student)
 
     def _create_table(self, headers):
         table = QTableWidget()
@@ -58,111 +59,156 @@ class AdminDashboardScreen(QWidget):
         return table
 
     # -------------------- Student Tab --------------------
-    def _setup_student_tab(self):
-        layout = QHBoxLayout(self.student_tab)
-        
-        # Form Group
-        form_group = QGroupBox("Student Details")
+    def _create_students_tab(self):
+        student_tab = QWidget()
+        main_layout = QHBoxLayout(student_tab)
+
+        # Left side: Add/Edit Student Form
+        form_group = QGroupBox("Add/Edit Student")
+        form_layout_container = QVBoxLayout()
         form_layout = QFormLayout()
+
+        self.student_id_entry = QLineEdit() # For editing, hidden for new
+        self.student_id_entry.setReadOnly(True)
+        self.student_name_entry = QLineEdit()
+        self.student_number_entry = QLineEdit()
+        self.course_entry = QLineEdit()
+        self.department_entry = QLineEdit()
+        self.rfid_tag_entry = QLineEdit()
+
+        form_layout.addRow("Student ID (for edit):", self.student_id_entry)
+        form_layout.addRow("Name:", self.student_name_entry)
+        form_layout.addRow("Student Number:", self.student_number_entry)
+        form_layout.addRow("Course:", self.course_entry)
+        form_layout.addRow("Department:", self.department_entry)
         
-        self.student_id_label = QLabel("Selected ID: N/A") # To show ID of selected student for update/delete
-        self.student_rfid_edit = QLineEdit()
-        self.student_name_edit = QLineEdit()
-        self.student_dept_edit = QLineEdit()
+        # RFID Tag field with Scan button
+        rfid_layout = QHBoxLayout()
+        rfid_layout.addWidget(self.rfid_tag_entry)
+        self.scan_rfid_button_student = QPushButton("Scan RFID Tag")
+        rfid_layout.addWidget(self.scan_rfid_button_student)
+        form_layout.addRow("RFID Tag:", rfid_layout)
 
-        form_layout.addRow(self.student_id_label)
-        form_layout.addRow("RFID Tag:", self.student_rfid_edit)
-        form_layout.addRow("Name:", self.student_name_edit)
-        form_layout.addRow("Department:", self.student_dept_edit)
-        
-        self.student_add_button = QPushButton("Add Student")
-        self.student_update_button = QPushButton("Update Student")
-        self.student_delete_button = QPushButton("Delete Student")
-        self.student_clear_button = QPushButton("Clear Fields")
+        form_layout_container.addLayout(form_layout)
 
-        self.student_add_button.clicked.connect(self._handle_add_student)
-        self.student_update_button.clicked.connect(self._handle_update_student)
-        self.student_delete_button.clicked.connect(self._handle_delete_student)
-        self.student_clear_button.clicked.connect(self._clear_student_fields)
+        student_buttons_layout = QHBoxLayout()
+        self.add_student_button = QPushButton("Add Student")
+        self.update_student_button = QPushButton("Update Student")
+        self.clear_student_form_button = QPushButton("Clear Form")
+        student_buttons_layout.addWidget(self.add_student_button)
+        student_buttons_layout.addWidget(self.update_student_button)
+        student_buttons_layout.addWidget(self.clear_student_form_button)
+        form_layout_container.addLayout(student_buttons_layout)
+        form_group.setLayout(form_layout_container)
 
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.student_add_button)
-        button_layout.addWidget(self.student_update_button)
-        button_layout.addWidget(self.student_delete_button)
-        button_layout.addWidget(self.student_clear_button)
-        form_layout.addRow(button_layout)
-        
-        form_group.setLayout(form_layout)
-        layout.addWidget(form_group, 1) # Form takes 1 part of stretch
-
-        # Table Group
-        table_group = QGroupBox("Existing Students")
+        # Right side: Students Table
+        table_group = QGroupBox("Registered Students")
         table_layout = QVBoxLayout()
-        self.student_table = self._create_table(["ID", "RFID Tag", "Name", "Department", "Created At"])
-        self.student_table.itemSelectionChanged.connect(self._load_student_to_form)
-        
-        self.student_refresh_button = QPushButton("Refresh List")
-        self.student_refresh_button.clicked.connect(self.load_students_data)
-        
-        table_layout.addWidget(self.student_refresh_button)
-        table_layout.addWidget(self.student_table)
+        self.students_table = QTableWidget()
+        self.students_table.setColumnCount(7) # ID, Name, Student No, Course, Dept, RFID, Actions
+        self.students_table.setHorizontalHeaderLabels(["ID", "Name", "Student No.", "Course", "Department", "RFID Tag", "Created At"])
+        self.students_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.students_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.students_table.setSelectionBehavior(QTableWidget.SelectRows)
+        table_layout.addWidget(self.students_table)
         table_group.setLayout(table_layout)
-        layout.addWidget(table_group, 2) # Table takes 2 parts of stretch
 
-    def _clear_student_fields(self):
-        self.student_id_label.setText("Selected ID: N/A")
-        self.student_rfid_edit.clear()
-        self.student_name_edit.clear()
-        self.student_dept_edit.clear()
-        self.student_table.clearSelection()
+        main_layout.addWidget(form_group, 1) # Form takes 1 part of stretch
+        main_layout.addWidget(table_group, 2) # Table takes 2 parts of stretch
 
-    def _load_student_to_form(self):
-        selected_rows = self.student_table.selectedItems()
+        # Connect buttons
+        self.add_student_button.clicked.connect(self._add_student)
+        self.update_student_button.clicked.connect(self._update_student)
+        self.clear_student_form_button.clicked.connect(self._clear_student_form)
+        self.students_table.itemDoubleClicked.connect(self._load_student_data_to_form)
+        self.scan_rfid_button_student.clicked.connect(self._on_scan_rfid_for_student_clicked) # Connect the new button
+
+        return student_tab
+
+    @pyqtSlot(str)
+    def update_rfid_tag_entry_for_new_student(self, tag_id):
+        print(f"AdminDashboardScreen: Received tag to update UI: {tag_id}")
+        self.rfid_tag_entry.setText(tag_id)
+        if not tag_id:
+            QMessageBox.warning(self, "RFID Scan", "Failed to scan RFID tag or scan was cancelled.")
+
+    def _on_scan_rfid_for_student_clicked(self):
+        print("AdminDashboardScreen: 'Scan RFID for Student' button clicked.")
+        self.rfid_tag_entry.clear() # Clear previous tag before new scan
+        QMessageBox.information(self, "RFID Scan", "Please scan the student's RFID tag now.")
+        self.admin_controller.handle_scan_tag_for_new_student_button()
+
+    def _clear_student_form(self):
+        self.student_id_entry.setText("N/A")
+        self.student_name_entry.clear()
+        self.student_number_entry.clear()
+        self.course_entry.clear()
+        self.department_entry.clear()
+        self.rfid_tag_entry.clear()
+        self.students_table.clearSelection()
+
+    def _load_student_data_to_form(self):
+        selected_rows = self.students_table.selectedItems()
         if not selected_rows:
-            self._clear_student_fields()
+            self._clear_student_form()
             return
         
         row = selected_rows[0].row()
-        self.student_id_label.setText(f"Selected ID: {self.student_table.item(row, 0).text()}")
-        self.student_rfid_edit.setText(self.student_table.item(row, 1).text())
-        self.student_name_edit.setText(self.student_table.item(row, 2).text())
-        self.student_dept_edit.setText(self.student_table.item(row, 3).text())
+        self.student_id_entry.setText(self.students_table.item(row, 0).text())
+        self.student_name_entry.setText(self.students_table.item(row, 1).text())
+        self.student_number_entry.setText(self.students_table.item(row, 2).text())
+        self.course_entry.setText(self.students_table.item(row, 3).text())
+        self.department_entry.setText(self.students_table.item(row, 4).text())
+        self.rfid_tag_entry.setText(self.students_table.item(row, 5).text())
 
-    def _handle_add_student(self):
-        rfid = self.student_rfid_edit.text().strip()
-        name = self.student_name_edit.text().strip()
-        dept = self.student_dept_edit.text().strip()
+    def _add_student(self):
+        rfid = self.rfid_tag_entry.text().strip()
+        name = self.student_name_entry.text().strip()
+        student_number = self.student_number_entry.text().strip()
+        course = self.course_entry.text().strip()
+        department = self.department_entry.text().strip()
+
         if not rfid or not name:
             QMessageBox.warning(self, "Input Error", "RFID Tag and Name are required.")
             return
-        if self.admin_controller.add_student(rfid, name, dept):
+        
+        if self.admin_controller.add_student(rfid_tag=rfid, name=name, student_number=student_number, course=course, department=department):
             QMessageBox.information(self, "Success", "Student added successfully.")
-            self._clear_student_fields()
-            self.load_students_data()
+            self._clear_student_form()
+            self.admin_controller.load_students() 
         else:
-            QMessageBox.critical(self, "Error", "Failed to add student. Check logs or ensure RFID is unique.")
+            QMessageBox.critical(self, "Error", "Failed to add student. Check logs, ensure RFID is unique, or student exists.")
 
-    def _handle_update_student(self):
-        student_id_text = self.student_id_label.text().replace("Selected ID: ", "")
-        if student_id_text == "N/A":
+    def _update_student(self):
+        student_id_text = self.student_id_entry.text()
+        if not student_id_text or student_id_text == "N/A":
             QMessageBox.warning(self, "Selection Error", "Please select a student to update.")
             return
-        student_id = int(student_id_text)
-        rfid = self.student_rfid_edit.text().strip()
-        name = self.student_name_edit.text().strip()
-        dept = self.student_dept_edit.text().strip()
+        try:
+            student_id = int(student_id_text)
+        except ValueError:
+            QMessageBox.warning(self, "Input Error", "Invalid Student ID.")
+            return
+
+        rfid = self.rfid_tag_entry.text().strip()
+        name = self.student_name_entry.text().strip()
+        student_number = self.student_number_entry.text().strip()
+        course = self.course_entry.text().strip()
+        department = self.department_entry.text().strip()
+
         if not rfid or not name:
             QMessageBox.warning(self, "Input Error", "RFID Tag and Name are required.")
             return
-        if self.admin_controller.update_student(student_id, rfid, name, dept):
-            QMessageBox.information(self, "Success", "Student updated successfully.")
-            self._clear_student_fields()
-            self.load_students_data()
-        else:
-            QMessageBox.critical(self, "Error", "Failed to update student. Check logs.")
 
-    def _handle_delete_student(self):
-        student_id_text = self.student_id_label.text().replace("Selected ID: ", "")
+        if self.admin_controller.update_student(student_id=student_id, rfid_tag=rfid, name=name, student_number=student_number, course=course, department=department):
+            QMessageBox.information(self, "Success", "Student updated successfully.")
+            self._clear_student_form()
+            self.admin_controller.load_students()
+        else:
+            QMessageBox.critical(self, "Error", "Failed to update student. Check logs or ensure RFID uniqueness.")
+
+    def _delete_student(self):
+        student_id_text = self.student_id_entry.text().replace("Selected ID: ", "")
         if student_id_text == "N/A":
             QMessageBox.warning(self, "Selection Error", "Please select a student to delete.")
             return
@@ -174,14 +220,15 @@ class AdminDashboardScreen(QWidget):
             student_id = int(student_id_text)
             if self.admin_controller.delete_student(student_id):
                 QMessageBox.information(self, "Success", "Student deleted successfully.")
-                self._clear_student_fields()
+                self._clear_student_form()
                 self.load_students_data()
             else:
                 QMessageBox.critical(self, "Error", "Failed to delete student. Check logs or if student has related consultations.")
 
     # -------------------- Faculty Tab --------------------
-    def _setup_faculty_tab(self):
-        layout = QHBoxLayout(self.faculty_tab)
+    def _create_faculty_tab(self):
+        faculty_tab = QWidget()
+        layout = QHBoxLayout(faculty_tab)
 
         # Form Group
         form_group = QGroupBox("Faculty Details")
@@ -317,10 +364,10 @@ class AdminDashboardScreen(QWidget):
             else:
                 QMessageBox.critical(self, "Error", "Failed to delete faculty. Check logs or if faculty has related consultations.")
 
-
     # -------------------- Consultation Tab --------------------
-    def _setup_consultation_tab(self):
-        layout = QVBoxLayout(self.consultation_tab)
+    def _create_consultations_tab(self):
+        consultation_tab = QWidget()
+        layout = QVBoxLayout(consultation_tab)
         
         table_group = QGroupBox("All Consultation Requests")
         table_layout = QVBoxLayout()
@@ -356,18 +403,21 @@ class AdminDashboardScreen(QWidget):
 
     def load_students_data(self):
         students = self.admin_controller.get_all_students()
-        self.student_table.setRowCount(0) # Clear existing rows
+        self.students_table.setRowCount(0) 
         if students:
+            # Headers: ["ID", "Name", "Student No.", "Course", "Department", "RFID Tag", "Created At"]
+            # student_data keys from DB: student_id, name, student_number, course, department, rfid_tag, created_at
             for row_num, student_data in enumerate(students):
-                self.student_table.insertRow(row_num)
-                self.student_table.setItem(row_num, 0, QTableWidgetItem(str(student_data.get('student_id', ''))))
-                self.student_table.setItem(row_num, 1, QTableWidgetItem(student_data.get('rfid_tag', '')))
-                self.student_table.setItem(row_num, 2, QTableWidgetItem(student_data.get('name', '')))
-                self.student_table.setItem(row_num, 3, QTableWidgetItem(student_data.get('department', '')))
+                self.students_table.insertRow(row_num)
+                self.students_table.setItem(row_num, 0, QTableWidgetItem(str(student_data.get('student_id', ''))))
+                self.students_table.setItem(row_num, 1, QTableWidgetItem(student_data.get('name', '')))
+                self.students_table.setItem(row_num, 2, QTableWidgetItem(student_data.get('student_number', ''))) # Use actual data
+                self.students_table.setItem(row_num, 3, QTableWidgetItem(student_data.get('course', '')))       # Use actual data
+                self.students_table.setItem(row_num, 4, QTableWidgetItem(student_data.get('department', '')))
+                self.students_table.setItem(row_num, 5, QTableWidgetItem(student_data.get('rfid_tag', '')))
                 created_at = student_data.get('created_at')
-                self.student_table.setItem(row_num, 4, QTableWidgetItem(str(created_at) if created_at else ''))
-        self.student_table.resizeColumnsToContents()
-
+                self.students_table.setItem(row_num, 6, QTableWidgetItem(str(created_at) if created_at else ''))
+        self.students_table.resizeColumnsToContents()
 
     def load_faculty_data(self):
         faculty_list = self.admin_controller.get_all_faculty()

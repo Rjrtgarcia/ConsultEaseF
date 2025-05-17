@@ -51,7 +51,7 @@ class ConsultEaseApp(QMainWindow):
 
         # Initialize Controllers first that don't take views
         if self.db_service:
-            self.admin_controller = AdminController(db_service=self.db_service)
+            self.admin_controller = AdminController(db_service=self.db_service, rfid_service=self.rfid_service)
             logging.info("AdminController initialized.")
         else:
             logging.error("AdminController NOT initialized due to DB service failure.")
@@ -62,7 +62,7 @@ class ConsultEaseApp(QMainWindow):
         
         # AdminDashboardScreen needs the admin_controller
         if self.admin_controller:
-            self.admin_dashboard_screen = AdminDashboardScreen(admin_controller=self.admin_controller)
+            self.admin_dashboard_screen = AdminDashboardScreen(admin_controller=self.admin_controller, main_dashboard_ref=self.dashboard_screen)
         else: # Fallback if admin_controller failed (though app would likely exit earlier if DB fails)
             logging.warning("AdminDashboardScreen cannot be fully initialized as AdminController is missing.")
             # Create a placeholder or error-displaying widget if needed
@@ -99,7 +99,10 @@ class ConsultEaseApp(QMainWindow):
         self.auth_screen.login_successful.connect(self.handle_login_success)
         self.auth_screen.request_open_admin_panel.connect(self.show_admin_dashboard_screen)
         self.dashboard_screen.request_open_admin_panel.connect(self.show_admin_dashboard_screen)
-        # No back signal from admin_dashboard_screen currently defined in its UI
+        
+        # Connect logout signal from Admin Dashboard
+        if isinstance(self.admin_dashboard_screen, AdminDashboardScreen):
+            self.admin_dashboard_screen.request_logout_from_admin_panel.connect(self.show_authentication_screen)
 
         self.show_authentication_screen()
 

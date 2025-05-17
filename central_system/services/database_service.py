@@ -72,6 +72,8 @@ class DatabaseService:
             student_id SERIAL PRIMARY KEY,
             rfid_tag VARCHAR(50) UNIQUE NOT NULL,
             name VARCHAR(255) NOT NULL,
+            student_number VARCHAR(50) NULL,
+            course VARCHAR(100) NULL,
             department VARCHAR(100),
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -159,16 +161,16 @@ class DatabaseService:
             # For now, just logging, as failure to seed might not be critical for app startup
 
     # --- Student Management ---
-    def add_student(self, rfid_tag: str, name: str, department: str = None):
+    def add_student(self, rfid_tag: str, name: str, student_number: str = None, course: str = None, department: str = None):
         """Adds a new student to the database."""
         query = sql.SQL("""
-            INSERT INTO students (rfid_tag, name, department, updated_at)
-            VALUES (%s, %s, %s, %s)
-            RETURNING student_id, rfid_tag, name, department, created_at, updated_at;
+            INSERT INTO students (rfid_tag, name, student_number, course, department, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING student_id, rfid_tag, name, student_number, course, department, created_at, updated_at;
         """)
         try:
             now = datetime.now()
-            return self._execute_query(query, (rfid_tag, name, department, now), fetch_one=True, commit=True)
+            return self._execute_query(query, (rfid_tag, name, student_number, course, department, now), fetch_one=True, commit=True)
         except psycopg2.IntegrityError as e:
             logging.warning(f"Could not add student with RFID {rfid_tag}. It might already exist. Error: {e}")
             return None # Or re-raise a custom exception
@@ -185,20 +187,20 @@ class DatabaseService:
 
     def get_all_students(self):
         """Retrieves all students from the database."""
-        query = sql.SQL("SELECT student_id, rfid_tag, name, department, created_at FROM students ORDER BY name;")
+        query = sql.SQL("SELECT student_id, rfid_tag, name, student_number, course, department, created_at FROM students ORDER BY name;")
         return self._execute_query(query, fetch_all=True)
 
-    def update_student(self, student_id: int, rfid_tag: str, name: str, department: str = None):
+    def update_student(self, student_id: int, rfid_tag: str, name: str, student_number: str = None, course: str = None, department: str = None):
         """Updates an existing student's details in the database."""
         query = sql.SQL("""
             UPDATE students
-            SET rfid_tag = %s, name = %s, department = %s, updated_at = %s
+            SET rfid_tag = %s, name = %s, student_number = %s, course = %s, department = %s, updated_at = %s
             WHERE student_id = %s
-            RETURNING student_id, rfid_tag, name, department, updated_at;
+            RETURNING student_id, rfid_tag, name, student_number, course, department, updated_at;
         """)
         try:
             now = datetime.now()
-            return self._execute_query(query, (rfid_tag, name, department, now, student_id), fetch_one=True, commit=True)
+            return self._execute_query(query, (rfid_tag, name, student_number, course, department, now, student_id), fetch_one=True, commit=True)
         except psycopg2.IntegrityError as e: # Catch issues like duplicate RFID tag on update
             logging.error(f"Error updating student ID {student_id} due to integrity constraint: {e}")
             return None
