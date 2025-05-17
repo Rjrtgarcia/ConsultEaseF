@@ -11,6 +11,13 @@ except ImportError:
     PYSERIAL_AVAILABLE = False
     logging.warning("pyserial library not found. Real RFID reader functionality will be unavailable. Please install it: pip install pyserial")
 
+try:
+    from evdev import InputDevice, categorize, ecodes, KeyEvent
+    EVDEV_AVAILABLE = True
+except ImportError:
+    EVDEV_AVAILABLE = False
+    logging.warning("evdev library not found. evdev RFID reader functionality will be unavailable.")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -19,11 +26,31 @@ HARDWARE_VID = 0xFFFF # Provided by user
 HARDWARE_PID = 0x0035 # Provided by user
 BAUD_RATE = 9600      # Common default, adjust if your reader uses a different rate
 
+# --- Configuration for Actual Serial Reader ---
+SERIAL_HARDWARE_VID = 0xFFFF # Provided by user
+SERIAL_HARDWARE_PID = 0x0035 # Provided by user
+SERIAL_BAUD_RATE = 9600      # Common default, adjust if your reader uses a different rate
+
+# --- Key mapping for evdev (simplified, may need expansion) ---
+# This maps evdev ecodes.KEY_* to characters.
+# This is a basic example; a more comprehensive map might be needed based on your reader's output.
+EVDEV_KEY_MAP = {
+    ecodes.KEY_0: '0', ecodes.KEY_1: '1', ecodes.KEY_2: '2', ecodes.KEY_3: '3', ecodes.KEY_4: '4',
+    ecodes.KEY_5: '5', ecodes.KEY_6: '6', ecodes.KEY_7: '7', ecodes.KEY_8: '8', ecodes.KEY_9: '9',
+    ecodes.KEY_A: 'A', ecodes.KEY_B: 'B', ecodes.KEY_C: 'C', ecodes.KEY_D: 'D', ecodes.KEY_E: 'E',
+    ecodes.KEY_F: 'F', # Add more letters if your tags use them (G-Z)
+    # Some readers might use numpad keys for hex, e.g. KEY_KP0-KEY_KP9, KEY_KPA-KEY_KPF
+    # KEY_ENTER or KEY_KPENTER is often the delimiter.
+}
+
 class RFIDService:
-    def __init__(self, simulation_mode=False, serial_port=None):
+    def __init__(self, simulation_mode=False, 
+                 use_serial=True, serial_port=None, serial_vid=SERIAL_HARDWARE_VID, serial_pid=SERIAL_HARDWARE_PID, serial_baud=SERIAL_BAUD_RATE,
+                 use_evdev=False, evdev_device_path=None, evdev_device_name_keyword=None, evdev_vid=None, evdev_pid=None):
+        
         self.simulation_mode = simulation_mode
-        self.serial_port_name = serial_port
-        self.serial_conn = None
+        self.active_mode = 'simulation' # Default
+
         self.simulated_rfid_tags = [
             "STUDENT_RFID_001", 
             "STUDENT_RFID_002", 
@@ -37,13 +64,46 @@ class RFIDService:
         self._original_rfid_callback = None # For single tag capture
         self._is_in_capture_mode = False    # For single tag capture
         
-        if not self.simulation_mode:
-            if not PYSERIAL_AVAILABLE:
-                logging.error("Cannot use actual RFID reader: pyserial library is not installed.")
-                logging.warning("Falling back to RFID simulation mode.")
+        # Serial Port Attributes
+        self.serial_port_name = serial_port
+        self.serial_vid = serial_vid
+        self.serial_pid = serial_pid
+        self.serial_baud = serial_baud
+        self.serial_conn = None
+
+        # Evdev Attributes
+        self.evdev_device_path = evdev_device_path
+        self.evdev_device_name_keyword = evdev_device_name_keyword
+        self.evdev_vid = evdev_vid
+        self.evdev_pid = evdev_pid
+        self.evdev_device = None
+        self._evdev_buffer = ""
+
+        if self.simulation_mode:
+            logging.info("RFIDService initialized in SIMULATION mode.")
+            self.active_mode = 'simulation'
+        elif use_evdev:
+            if not EVDEV_AVAILABLE:
+                logging.error("Cannot use evdev RFID reader: evdev library is not installed. Falling back to simulation.")
                 self.simulation_mode = True
+                self.active_mode = 'simulation'
             else:
-                self._connect_to_reader()
+                self.active_mode = 'evdev'
+                logging.info("RFIDService initialized in EVDEV mode.")
+                # Connection will be attempted in start_scanning or a dedicated connect method
+        elif use_serial: # Default to serial if not simulation and not explicitly evdev
+            if not PYSERIAL_AVAILABLE:
+                logging.error("Cannot use serial RFID reader: pyserial library is not installed. Falling back to simulation.")
+                self.simulation_mode = True
+                self.active_mode = 'simulation'
+            else:
+                self.active_mode = 'serial'
+                logging.info("RFIDService initialized in SERIAL mode.")
+                # self._connect_to_reader_serial() # Connect attempt deferred to start_scanning
+        else:
+            logging.warning("No RFID mode specified (simulation, serial, or evdev). Defaulting to simulation.")
+            self.simulation_mode = True # Ensure simulation if no valid mode
+            self.active_mode = 'simulation'
 
     def _connect_to_reader(self):
         if self.serial_conn and self.serial_conn.is_open:
@@ -99,14 +159,14 @@ class RFIDService:
         self._original_rfid_callback = self._rfid_callback # Store current main callback
         self._rfid_callback = capture_callback            # Set temporary capture callback
 
-        # Ensure scanning thread is active
         if not self._is_scanning:
-            self.start_scanning() # This will use the new temporary _rfid_callback if it starts a new scan loop
-        elif self.simulation_mode and (not self._scan_thread or not self._scan_thread.is_alive()):
-            # If already "scanning" but thread died (can happen in sim if not daemon properly handled before)
             self.start_scanning()
-        elif not self.simulation_mode and (not self.serial_conn or not self.serial_conn.is_open):
-            # If in actual mode but connection is bad, try to restart scanning which includes connection attempt
+        # Add checks for non-simulation modes if thread died or connection lost
+        elif self.active_mode == 'serial' and (not self.serial_conn or not self.serial_conn.is_open):
+            self.start_scanning()
+        elif self.active_mode == 'evdev' and not self.evdev_device: # Or a better check for evdev connection
+            self.start_scanning()
+        elif self.simulation_mode and (not self._scan_thread or not self._scan_thread.is_alive()):
             self.start_scanning()
 
     def stop_capture_single_tag(self):
@@ -146,56 +206,70 @@ class RFIDService:
                 self._notify_rfid_scanned(simulated_tag)
         logging.info("RFID simulation scan loop stopped.")
 
-    def _scan_loop_actual(self):
-        logging.info("Actual RFID scan loop started.")
+    def _scan_loop_serial(self):
+        logging.info("Actual serial RFID scan loop started.")
         if not self.serial_conn or not self.serial_conn.is_open:
-            logging.error("RFID reader not connected or port not open. Actual scan loop cannot run.")
-            # Try to reconnect once, then abort if still fails
-            self._connect_to_reader()
-            if not self.serial_conn or not self.serial_conn.is_open:
-                 logging.error("Failed to reconnect to RFID reader. Stopping actual scan loop.")
-                 self._is_scanning = False # Stop the loop indication
-                 # Optionally notify UI or main app about hardware failure
+            logging.error("Serial RFID reader not connected. Actual scan loop cannot run.")
+            self._is_scanning = False 
+            return
         
         while self._is_scanning:
-            if not self.serial_conn or not self.serial_conn.is_open:
-                logging.warning("Serial connection lost. Attempting to reconnect...")
-                self._connect_to_reader()
-                if not self.serial_conn or not self.serial_conn.is_open:
-                    logging.error("Reconnect failed. Stopping scan.")
-                    self._is_scanning = False
-                    break # Exit loop
-                else:
-                    logging.info("Successfully reconnected to RFID reader.")
             try:
-                if self.serial_conn and self.serial_conn.in_waiting > 0:
-                    # Read a line, assuming the reader sends data terminated by a newline
-                    # Adjust encoding and strip characters as necessary based on your reader's output
+                if self.serial_conn.in_waiting > 0:
                     rfid_data = self.serial_conn.readline().decode('ascii', errors='ignore').strip()
-                    if rfid_data: # Ensure it's not an empty string
-                        logging.info(f"[ACTUAL SCAN] Raw data: '{rfid_data}'")
-                        # Further parsing might be needed here depending on the reader's output format
-                        # For example, if it sends "ID: AABBCCDD", you'd parse out "AABBCCDD"
-                        parsed_tag = rfid_data # Assume direct tag for now
-                        self._notify_rfid_scanned(parsed_tag)
+                    if rfid_data:
+                        logging.info(f"[SERIAL SCAN] Raw data: '{rfid_data}'")
+                        self._notify_rfid_scanned(rfid_data)
             except serial.SerialException as e:
                 logging.error(f"Serial error during RFID scan: {e}")
-                # Attempt to close and reopen the connection or stop
-                if self.serial_conn and self.serial_conn.is_open:
-                    self.serial_conn.close()
+                if self.serial_conn and self.serial_conn.is_open: self.serial_conn.close()
                 self.serial_conn = None
-                logging.info("Serial connection closed due to error. Will attempt to reconnect.")
-                time.sleep(2) # Wait a bit before trying to reconnect in the next loop iteration
+                self._is_scanning = False # Stop scanning on serial error
+                logging.info("Serial connection lost. Stopping scan. Will attempt to reconnect on next start_scanning.")
+                break 
             except UnicodeDecodeError as e:
-                logging.warning(f"Unicode decode error reading from RFID: {e}. Raw data might not be ASCII or UTF-8.")
-                # You might want to read raw bytes and inspect them if this happens often
+                logging.warning(f"Unicode decode error reading from serial RFID: {e}.")
                 if self.serial_conn and self.serial_conn.in_waiting > 0:
-                    _ = self.serial_conn.read(self.serial_conn.in_waiting) # Clear buffer
+                    _ = self.serial_conn.read(self.serial_conn.in_waiting)
             except Exception as e:
-                logging.error(f"Unexpected error in actual RFID scan loop: {e}")
-                time.sleep(1) # Prevent rapid error looping
-            time.sleep(0.1) # Small delay to be friendly to the CPU
-        logging.info("Actual RFID scan loop stopped.")
+                logging.error(f"Unexpected error in serial RFID scan loop: {e}")
+                time.sleep(1)
+            time.sleep(0.1)
+        logging.info("Actual serial RFID scan loop stopped.")
+
+    def _scan_loop_evdev(self):
+        logging.info(f"Actual evdev RFID scan loop started for device: {self.evdev_device.name}")
+        self._evdev_buffer = ""
+        try:
+            for event in self.evdev_device.read_loop():
+                if not self._is_scanning: # Check if scanning was stopped externally
+                    break
+                if event.type == ecodes.EV_KEY:
+                    key_event = categorize(event)
+                    if key_event.keystate == KeyEvent.key_down: # Process on key press
+                        key_code = key_event.scancode # or key_event.keycode for named keys
+                        char = EVDEV_KEY_MAP.get(key_event.keycode) # Use keycode for map
+                        
+                        # Handle Enter key as delimiter
+                        if key_event.keycode == ecodes.KEY_ENTER or key_event.keycode == ecodes.KEY_KPENTER:
+                            if self._evdev_buffer:
+                                logging.info(f"[EVDEV SCAN] Tag collected: {self._evdev_buffer}")
+                                self._notify_rfid_scanned(self._evdev_buffer)
+                                self._evdev_buffer = "" # Reset buffer
+                        elif char: # If it's a character we mapped
+                            self._evdev_buffer += char
+                        # else: logger.debug(f"[EVDEV KEY] Ignored: {key_event.keycode}")
+        except OSError as e:
+            logging.error(f"OSError in evdev scan loop (device disconnected?): {e}")
+            self.evdev_device = None # Mark device as disconnected/unusable
+            self._is_scanning = False # Stop scanning indication
+        except Exception as e:
+            logging.error(f"Unexpected error in evdev scan loop: {e}")
+        finally:
+            if self.evdev_device: # Release grab if loop exits for any reason
+                try: self.evdev_device.ungrab()
+                except Exception as e_ungrab: logging.warning(f"Could not ungrab evdev device: {e_ungrab}")
+            logging.info("Actual evdev RFID scan loop stopped.")
 
     def start_scanning(self):
         if self._is_scanning:
@@ -203,58 +277,160 @@ class RFIDService:
             return
 
         self._is_scanning = True
-        if self.simulation_mode:
+        scan_started = False
+
+        if self.simulation_mode or self.active_mode == 'simulation':
             self._scan_thread = threading.Thread(target=self._scan_loop_simulation, daemon=True)
             logging.info("Starting RFID scanning in SIMULATION mode.")
-        else:
-            if not PYSERIAL_AVAILABLE:
-                logging.error("Cannot start actual RFID scanning: pyserial is not available. Falling back to simulation.")
-                self.simulation_mode = True # Force simulation
+            scan_started = True
+        elif self.active_mode == 'evdev':
+            if not EVDEV_AVAILABLE: # Should have been caught in init, but double check
+                logging.error("Cannot start evdev RFID scanning: evdev library is not available. Falling back to simulation.")
+                self.simulation_mode = True; self.active_mode = 'simulation' 
                 self._scan_thread = threading.Thread(target=self._scan_loop_simulation, daemon=True)
-            elif not self.serial_conn or not self.serial_conn.is_open:
-                logging.warning("Actual RFID reader not connected. Attempting to connect before starting scan loop.")
-                self._connect_to_reader()
-                if not self.serial_conn or not self.serial_conn.is_open:
-                    logging.error("Failed to connect to RFID reader. Cannot start actual scanning. Check connection/port.")
-                    # Optionally fallback to simulation or just don't start
-                    self._is_scanning = False
-                    return # Don't start the thread if connection failed
-                else:
-                    logging.info("Starting RFID scanning in ACTUAL hardware mode.")
-                    self._scan_thread = threading.Thread(target=self._scan_loop_actual, daemon=True)
+                scan_started = True
+            elif self._connect_to_reader_evdev():
+                self._scan_thread = threading.Thread(target=self._scan_loop_evdev, daemon=True)
+                logging.info("Starting RFID scanning in EVDEV mode.")
+                scan_started = True
             else:
-                logging.info("Starting RFID scanning in ACTUAL hardware mode.")
-                self._scan_thread = threading.Thread(target=self._scan_loop_actual, daemon=True)
+                logging.error("Failed to connect to evdev reader. Cannot start evdev scanning. Falling back to simulation.")
+                self.simulation_mode = True; self.active_mode = 'simulation' 
+                self._scan_thread = threading.Thread(target=self._scan_loop_simulation, daemon=True)
+                scan_started = True # Start in sim mode as fallback
+        elif self.active_mode == 'serial':
+            if not PYSERIAL_AVAILABLE: # Should have been caught in init
+                logging.error("Cannot start serial RFID scanning: pyserial is not available. Falling back to simulation.")
+                self.simulation_mode = True; self.active_mode = 'simulation' 
+                self._scan_thread = threading.Thread(target=self._scan_loop_simulation, daemon=True)
+                scan_started = True
+            elif self._connect_to_reader_serial():
+                self._scan_thread = threading.Thread(target=self._scan_loop_serial, daemon=True)
+                logging.info("Starting RFID scanning in SERIAL mode.")
+                scan_started = True
+            else:
+                logging.error("Failed to connect to serial reader. Cannot start serial scanning. Falling back to simulation.")
+                self.simulation_mode = True; self.active_mode = 'simulation' 
+                self._scan_thread = threading.Thread(target=self._scan_loop_simulation, daemon=True)
+                scan_started = True # Start in sim mode as fallback
         
-        if self._scan_thread:
+        if scan_started and self._scan_thread:
             self._scan_thread.start()
             logging.info("RFID scan thread initiated.")
         else:
-            logging.warning("Scan thread not created.")
+            logging.warning("RFID scan thread not created or not started for the active mode.")
+            self._is_scanning = False # Ensure this is false if no thread was started
 
     def stop_scanning(self):
         if not self._is_scanning:
-            # logging.info("RFID scanning is not active.") # Can be noisy
             return
-
         self._is_scanning = False
+        if self.active_mode == 'evdev' and self.evdev_device: # For evdev, read_loop might need interruption.
+            # The loop breaks on self._is_scanning = False. Ungrab is in finally block of loop.
+            pass 
         if self._scan_thread and self._scan_thread.is_alive():
-            try:
-                self._scan_thread.join(timeout=1.5) # Wait for the thread to finish
-            except RuntimeError as e:
-                logging.warning(f"RuntimeError joining scan thread: {e} (possibly already stopped or never started properly)")
+            try: self._scan_thread.join(timeout=1.0) 
+            except RuntimeError: pass # Already stopped
         self._scan_thread = None
         logging.info("RFID scanning stopped.")
 
     def close(self):
         self.stop_scanning()
         if self.serial_conn and self.serial_conn.is_open:
-            try:
-                self.serial_conn.close()
-                logging.info("RFID serial connection closed.")
-            except Exception as e:
-                logging.error(f"Error closing serial connection: {e}")
+            try: self.serial_conn.close(); logging.info("RFID serial connection closed.")
+            except Exception as e: logging.error(f"Error closing serial connection: {e}")
         self.serial_conn = None
+        
+        if self.evdev_device:
+            try: 
+                # Ungrab might have already happened in the scan loop's finally block
+                # self.evdev_device.ungrab() # Attempt ungrab if not already done.
+                self.evdev_device.close() 
+                logging.info(f"Closed evdev device: {self.evdev_device.name}")
+            except Exception as e: logging.error(f"Error closing evdev device: {e}")
+        self.evdev_device = None
+
+    def _connect_to_reader_serial(self):
+        if self.serial_conn and self.serial_conn.is_open:
+            logging.info("Serial connection already open.")
+            return True
+
+        if not self.serial_port_name:
+            logging.info(f"Attempting to find serial RFID reader with VID:PID {self.serial_vid:04X}:{self.serial_pid:04X}")
+            ports = serial.tools.list_ports.comports()
+            for port in ports:
+                if port.vid == self.serial_vid and port.pid == self.serial_pid:
+                    self.serial_port_name = port.device
+                    logging.info(f"Serial RFID Reader found on port: {self.serial_port_name}")
+                    break
+            if not self.serial_port_name:
+                logging.warning("Could not automatically find serial RFID reader.")
+                available_ports = [p.device for p in ports]
+                logging.info(f"Available serial ports: {available_ports if available_ports else 'None'}")
+                return False
+
+        if self.serial_port_name:
+            try:
+                self.serial_conn = serial.Serial(self.serial_port_name, self.serial_baud, timeout=1)
+                logging.info(f"Connected to serial RFID reader on {self.serial_port_name} at {self.serial_baud} baud.")
+                return True
+            except serial.SerialException as e:
+                logging.error(f"Failed to connect to serial RFID reader on {self.serial_port_name}: {e}")
+                self.serial_conn = None
+                return False
+        else:
+            logging.error("No serial port configured or detected for serial RFID reader.")
+            return False
+        
+    def _find_evdev_device(self):
+        """Finds an evdev device based on path, name keyword, or VID/PID."""
+        if self.evdev_device_path:
+            try:
+                device = InputDevice(self.evdev_device_path)
+                logging.info(f"Found evdev device by path: {device.name} ({self.evdev_device_path})")
+                return device
+            except Exception as e:
+                logging.error(f"Error opening evdev device by path {self.evdev_device_path}: {e}")
+                return None
+
+        devices = [InputDevice(path) for path in evdev.list_devices()]
+        if not devices:
+            logging.warning("No evdev input devices found.")
+            return None
+
+        for device in devices:
+            match = False
+            if self.evdev_device_name_keyword and self.evdev_device_name_keyword.lower() in device.name.lower():
+                match = True
+            elif self.evdev_vid is not None and self.evdev_pid is not None and \
+                 device.info.vendor == self.evdev_vid and device.info.product == self.evdev_pid:
+                match = True
+            
+            if match:
+                logging.info(f"Found evdev device: {device.name} (Path: {device.path}, VID: {device.info.vendor:04X}, PID: {device.info.product:04X})")
+                return device
+        
+        logging.warning("Could not find a matching evdev device by name keyword, VID/PID.")
+        return None
+
+    def _connect_to_reader_evdev(self):
+        if self.evdev_device:
+            # How to check if an evdev device is still valid/connected without trying to read?
+            # For now, assume if it exists, it's potentially usable.
+            logging.info(f"Evdev device {self.evdev_device.name} already selected.")
+            return True 
+            
+        self.evdev_device = self._find_evdev_device()
+        if self.evdev_device:
+            try:
+                self.evdev_device.grab() # Grab for exclusive access
+                logging.info(f"Successfully grabbed evdev device: {self.evdev_device.name}")
+                return True
+            except Exception as e: # Typically OSError if already grabbed or permissions issue
+                logging.error(f"Failed to grab evdev device {self.evdev_device.name}: {e}. Check permissions or if another process is using it.")
+                self.evdev_device = None # Clear if grab fails
+                return False
+        return False
 
 # Example Usage (for testing this service directly)
 if __name__ == '__main__':

@@ -1,8 +1,11 @@
+import logging
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel, QLineEdit,
                              QPushButton, QTableWidget, QTableWidgetItem, QMessageBox,
                              QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QAbstractItemView)
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QFont
+
+logger_admin_dash = logging.getLogger(__name__)
 
 class AdminDashboardScreen(QWidget):
     # Signals for controller interaction if needed later, for now direct calls
@@ -11,33 +14,53 @@ class AdminDashboardScreen(QWidget):
 
     def __init__(self, admin_controller, main_dashboard_ref, parent=None):
         super().__init__(parent)
+        logger_admin_dash.info("AdminDashboardScreen: __init__ started.")
         self.admin_controller = admin_controller
         self.main_dashboard_ref = main_dashboard_ref # To refresh if needed
         self.setWindowTitle("Admin Dashboard - ConsultEase")
         self.setGeometry(150, 150, 1000, 700)
         self.setMinimumSize(800, 500)
+        
+        logger_admin_dash.info("AdminDashboardScreen: Calling _init_ui().")
         self._init_ui()
+        logger_admin_dash.info("AdminDashboardScreen: _init_ui() completed.")
+        
         self._connect_signals()
+        logger_admin_dash.info("AdminDashboardScreen: _connect_signals() completed.")
+
+        logger_admin_dash.info("AdminDashboardScreen: Calling load_all_data().")
         self.load_all_data()
+        logger_admin_dash.info("AdminDashboardScreen: load_all_data() completed.")
+        logger_admin_dash.info("AdminDashboardScreen: __init__ finished.")
 
     def _init_ui(self):
+        logger_admin_dash.info("AdminDashboardScreen: _init_ui() started.")
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
+        
+        logger_admin_dash.info("AdminDashboardScreen: Adding Manage Students tab.")
         self.tabs.addTab(self._create_students_tab(), "Manage Students")
+        logger_admin_dash.info("AdminDashboardScreen: Manage Students tab added.")
+
+        logger_admin_dash.info("AdminDashboardScreen: Adding Manage Faculty tab.")
         self.tabs.addTab(self._create_faculty_tab(), "Manage Faculty")
+        logger_admin_dash.info("AdminDashboardScreen: Manage Faculty tab added.")
+
+        logger_admin_dash.info("AdminDashboardScreen: Adding View Consultations tab.")
         self.tabs.addTab(self._create_consultations_tab(), "View Consultations")
+        logger_admin_dash.info("AdminDashboardScreen: View Consultations tab added.")
+        
         layout.addWidget(self.tabs)
 
-        # Add Logout Button
         self.logout_button = QPushButton("Logout and Return to Login")
         self.logout_button.clicked.connect(self.request_logout_from_admin_panel.emit)
-        # Add some styling or place it appropriately, e.g., in a bottom hbox
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         button_layout.addWidget(self.logout_button)
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
+        logger_admin_dash.info("AdminDashboardScreen: _init_ui() finished.")
 
     def _connect_signals(self):
         # Connect signals from controller to update tables
@@ -227,6 +250,7 @@ class AdminDashboardScreen(QWidget):
 
     # -------------------- Faculty Tab --------------------
     def _create_faculty_tab(self):
+        logger_admin_dash.info("AdminDashboardScreen: _create_faculty_tab() started.")
         faculty_tab = QWidget()
         layout = QHBoxLayout(faculty_tab)
 
@@ -282,6 +306,15 @@ class AdminDashboardScreen(QWidget):
         table_layout.addWidget(self.faculty_table)
         table_group.setLayout(table_layout)
         layout.addWidget(table_group, 2)
+
+        # Connect signals for faculty tab
+        self.faculty_add_button.clicked.connect(self._handle_add_faculty)
+        self.faculty_update_button.clicked.connect(self._handle_update_faculty)
+        self.faculty_delete_button.clicked.connect(self._handle_delete_faculty)
+        self.faculty_clear_button.clicked.connect(self._clear_faculty_fields)
+
+        logger_admin_dash.info("AdminDashboardScreen: _create_faculty_tab() finished.")
+        return faculty_tab
 
     def _clear_faculty_fields(self):
         self.faculty_id_label.setText("Selected ID: N/A")
@@ -397,9 +430,19 @@ class AdminDashboardScreen(QWidget):
 
     # -------------------- Data Loading Functions --------------------
     def load_all_data(self):
+        logger_admin_dash.info("AdminDashboardScreen: load_all_data() started.")
+        logger_admin_dash.info("AdminDashboardScreen: Calling load_students_data().")
         self.load_students_data()
+        logger_admin_dash.info("AdminDashboardScreen: load_students_data() completed.")
+        
+        logger_admin_dash.info("AdminDashboardScreen: Calling load_faculty_data().")
         self.load_faculty_data()
+        logger_admin_dash.info("AdminDashboardScreen: load_faculty_data() completed.")
+        
+        logger_admin_dash.info("AdminDashboardScreen: Calling load_consultations_data().")
         self.load_consultations_data()
+        logger_admin_dash.info("AdminDashboardScreen: load_consultations_data() completed.")
+        logger_admin_dash.info("AdminDashboardScreen: load_all_data() finished.")
 
     def load_students_data(self):
         students = self.admin_controller.get_all_students()
@@ -420,21 +463,37 @@ class AdminDashboardScreen(QWidget):
         self.students_table.resizeColumnsToContents()
 
     def load_faculty_data(self):
-        faculty_list = self.admin_controller.get_all_faculty()
-        self.faculty_table.setRowCount(0)
-        if faculty_list:
-            for row_num, faculty_data in enumerate(faculty_list):
-                self.faculty_table.insertRow(row_num)
-                self.faculty_table.setItem(row_num, 0, QTableWidgetItem(str(faculty_data.get('faculty_id', ''))))
-                self.faculty_table.setItem(row_num, 1, QTableWidgetItem(faculty_data.get('name', '')))
-                self.faculty_table.setItem(row_num, 2, QTableWidgetItem(faculty_data.get('department', '')))
-                self.faculty_table.setItem(row_num, 3, QTableWidgetItem(faculty_data.get('ble_identifier', '')))
-                self.faculty_table.setItem(row_num, 4, QTableWidgetItem(faculty_data.get('office_location', '')))
-                self.faculty_table.setItem(row_num, 5, QTableWidgetItem(faculty_data.get('contact_details', '')))
-                self.faculty_table.setItem(row_num, 6, QTableWidgetItem(faculty_data.get('current_status', '')))
-                status_updated_at = faculty_data.get('status_updated_at')
-                self.faculty_table.setItem(row_num, 7, QTableWidgetItem(str(status_updated_at) if status_updated_at else ''))
-        self.faculty_table.resizeColumnsToContents()
+        logger_admin_dash.info("AdminDashboardScreen: load_faculty_data() started.")
+        try:
+            if not hasattr(self, 'faculty_table') or self.faculty_table is None:
+                logger_admin_dash.error("AdminDashboardScreen: faculty_table does not exist or is None before loading data!")
+                return
+            logger_admin_dash.info(f"AdminDashboardScreen: faculty_table type before setRowCount: {type(self.faculty_table)}")
+            
+            faculty_list = self.admin_controller.get_all_faculty()
+            logger_admin_dash.info(f"AdminDashboardScreen: Fetched faculty list: {faculty_list is not None}")
+            
+            logger_admin_dash.info("AdminDashboardScreen: Attempting self.faculty_table.setRowCount(0).")
+            self.faculty_table.setRowCount(0)
+            logger_admin_dash.info("AdminDashboardScreen: self.faculty_table.setRowCount(0) successful.")
+
+            if faculty_list:
+                for row_num, faculty_data in enumerate(faculty_list):
+                    self.faculty_table.insertRow(row_num)
+                    self.faculty_table.setItem(row_num, 0, QTableWidgetItem(str(faculty_data.get('faculty_id', ''))))
+                    self.faculty_table.setItem(row_num, 1, QTableWidgetItem(faculty_data.get('name', '')))
+                    self.faculty_table.setItem(row_num, 2, QTableWidgetItem(faculty_data.get('department', '')))
+                    self.faculty_table.setItem(row_num, 3, QTableWidgetItem(faculty_data.get('ble_identifier', '')))
+                    self.faculty_table.setItem(row_num, 4, QTableWidgetItem(faculty_data.get('office_location', '')))
+                    self.faculty_table.setItem(row_num, 5, QTableWidgetItem(faculty_data.get('contact_details', '')))
+                    self.faculty_table.setItem(row_num, 6, QTableWidgetItem(faculty_data.get('current_status', '')))
+                    status_updated_at = faculty_data.get('status_updated_at')
+                    self.faculty_table.setItem(row_num, 7, QTableWidgetItem(str(status_updated_at) if status_updated_at else ''))
+            self.faculty_table.resizeColumnsToContents()
+            logger_admin_dash.info("AdminDashboardScreen: load_faculty_data() successfully finished.")
+        except Exception as e:
+            logger_admin_dash.error(f"AdminDashboardScreen: CRITICAL ERROR in load_faculty_data(): {e}", exc_info=True)
+            # Potentially re-raise or handle more gracefully depending on desired app behavior
 
     def load_consultations_data(self):
         consultations = self.admin_controller.get_all_consultations()
