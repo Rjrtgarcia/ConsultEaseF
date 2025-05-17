@@ -211,7 +211,10 @@ if __name__ == '__main__':
 
     try:
         print("MQTTService started. Waiting for connection and messages...")
-        print(f"Publish to '{FACULTY_STATUS_TOPIC_TEMPLATE.format("YOUR_FACULTY_BLE_ID")}' with payload 'Available' or '{{\"status\": \"Unavailable\"}}'")
+        # Corrected f-string and string construction
+        example_topic = FACULTY_STATUS_TOPIC_TEMPLATE.format("YOUR_FACULTY_BLE_ID")
+        example_payload_json = "{\"status\": \"Unavailable\"}" # Escaped for print
+        print(f"Publish to '{example_topic}' with payload 'Available' or '{example_payload_json}'")
         print(f"Example: mosquitto_pub -h {MQTT_BROKER_HOST} -t consultease/faculty/TEST_BLE_001/status -m \"{{\\\"status\\\": \\\"Available\\\"}}\"")
         
         # Keep main thread alive to observe logs and allow MQTT thread to run
