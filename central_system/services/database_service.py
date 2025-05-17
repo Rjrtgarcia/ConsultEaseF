@@ -66,7 +66,6 @@ class DatabaseService:
 
     def _ensure_tables_exist(self):
         """Checks if the required tables exist and creates them if not."""
-        # This matches the schema in documentation/database_schema.md
         create_students_table_sql = """
         CREATE TABLE IF NOT EXISTS students (
             student_id SERIAL PRIMARY KEY,
@@ -117,15 +116,44 @@ class DatabaseService:
 
         try:
             logging.info("Ensuring database tables exist...")
+            logging.info("Attempting to create/verify 'students' table...")
             self._execute_query(create_students_table_sql, commit=True)
+            logging.info("'students' table creation/verification attempt complete.")
+
+            # Diagnostic: Check actual schema of students table
+            inspect_students_sql = sql.SQL("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'students' AND table_schema = 'public' ORDER BY ordinal_position;
+            """)
+            try:
+                logging.info("Querying actual schema of 'students' table from information_schema...")
+                students_columns = self._execute_query(inspect_students_sql, fetch_all=True)
+                if students_columns:
+                    logging.info("Actual columns found in 'students' table:")
+                    for col in students_columns:
+                        logging.info(f"  Column: {col['column_name']}, Type: {col['data_type']}")
+                else:
+                    logging.warning("Could not retrieve column information for 'students' table, or table does not exist after creation attempt.")
+            except Exception as e_inspect:
+                logging.error(f"Error during diagnostic inspection of 'students' table schema: {e_inspect}")
+
+            logging.info("Attempting to create/verify 'faculty' table...")
             self._execute_query(create_faculty_table_sql, commit=True)
+            logging.info("'faculty' table creation/verification complete.")
+            
+            logging.info("Attempting to create/verify 'consultations' table...")
             self._execute_query(create_consultations_table_sql, commit=True)
+            logging.info("'consultations' table creation/verification complete.")
+            
             logging.info("Database tables checked/created successfully.")
-            self._seed_initial_data() # Add call to seeding method
+            self._seed_initial_data()
         except psycopg2.Error as e:
             logging.error(f"Error creating database tables: {e}")
-            # If tables can't be created, the service is likely unusable.
             raise RuntimeError(f"Failed to create essential database tables: {e}")
+        except Exception as e_main_ensure:
+            logging.error(f"Unexpected error in _ensure_tables_exist: {e_main_ensure}")
+            raise
 
     def _seed_initial_data(self):
         """Seeds the database with initial sample data if tables are empty."""
