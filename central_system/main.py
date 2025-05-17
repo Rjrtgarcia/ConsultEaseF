@@ -39,8 +39,8 @@ class ConsultEaseApp(QMainWindow):
             QMessageBox.critical(self, "Startup Error", f"Failed to connect to the database: {e}\nThe application cannot continue.")
             sys.exit(1) # Critical error, exit
             
-        self.rfid_service = RFIDService(simulation_mode=True) 
-        logging.info("RFIDService initialized.")
+        self.rfid_service = RFIDService(simulation_mode=False) # Use actual RFID reader
+        logging.info("RFIDService initialized (Attempting Actual Hardware Mode).")
 
         self.mqtt_service = MQTTService(db_service=self.db_service)
         self.mqtt_service.start()
@@ -97,7 +97,8 @@ class ConsultEaseApp(QMainWindow):
 
         # Connect signals for navigation
         self.auth_screen.login_successful.connect(self.handle_login_success)
-        self.dashboard_screen.request_open_admin_panel.connect(self.show_admin_dashboard_screen) # Connect to new method
+        self.auth_screen.request_open_admin_panel.connect(self.show_admin_dashboard_screen)
+        self.dashboard_screen.request_open_admin_panel.connect(self.show_admin_dashboard_screen)
         # No back signal from admin_dashboard_screen currently defined in its UI
 
         self.show_authentication_screen()

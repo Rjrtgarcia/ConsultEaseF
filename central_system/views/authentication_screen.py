@@ -11,6 +11,7 @@ class AuthenticationScreen(QWidget):
     # Signal to request RFID scan start/stop
     request_rfid_scan_start = pyqtSignal()
     request_rfid_scan_stop = pyqtSignal()
+    request_open_admin_panel = pyqtSignal() # New signal for admin panel
 
     def __init__(self, parent_stacked_widget: QStackedWidget = None):
         super().__init__()
@@ -59,6 +60,13 @@ class AuthenticationScreen(QWidget):
         # layout.addWidget(self.submit_rfid_button)
         
         layout.addStretch(1) # Pushes elements to the top and middle
+
+        # Admin Panel Button
+        self.admin_panel_button = QPushButton("Admin Panel")
+        self.admin_panel_button.setFont(QFont("Arial", 10))
+        # self.admin_panel_button.setFixedWidth(150) # Optional fixed width
+        self.admin_panel_button.clicked.connect(self._handle_open_admin_panel)
+        layout.addWidget(self.admin_panel_button, 0, Qt.AlignRight) # Align to bottom right
 
         self.setLayout(layout)
         self.set_default_status_appearance()
@@ -117,6 +125,9 @@ class AuthenticationScreen(QWidget):
     # Call this method when the view is hidden to stop scanning
     def view_did_disappear(self):
         self.request_rfid_scan_stop.emit()
+
+    def _handle_open_admin_panel(self):
+        self.request_open_admin_panel.emit()
 
     def closeEvent(self, event):
         self.request_rfid_scan_stop.emit() # Ensure scanning stops if window is closed
