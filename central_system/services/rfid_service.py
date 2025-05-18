@@ -58,20 +58,31 @@ SERIAL_HARDWARE_VID = 0xFFFF # Provided by user
 SERIAL_HARDWARE_PID = 0x0035 # Provided by user
 SERIAL_BAUD_RATE = 9600      # Common default, adjust if your reader uses a different rate
 
-# --- Key mapping for evdev (simplified, may need expansion) ---
-# This maps evdev ecodes.KEY_* to characters.
-# This is a basic example; a more comprehensive map might be needed based on your reader's output.
-EVDEV_KEY_MAP = {
-    ecodes.KEY_0: '0', ecodes.KEY_1: '1', ecodes.KEY_2: '2', ecodes.KEY_3: '3', ecodes.KEY_4: '4',
-    ecodes.KEY_5: '5', ecodes.KEY_6: '6', ecodes.KEY_7: '7', ecodes.KEY_8: '8', ecodes.KEY_9: '9',
-    ecodes.KEY_A: 'A', ecodes.KEY_B: 'B', ecodes.KEY_C: 'C', ecodes.KEY_D: 'D', ecodes.KEY_E: 'E',
-    ecodes.KEY_F: 'F', ecodes.KEY_G: 'G', ecodes.KEY_H: 'H', ecodes.KEY_I: 'I', ecodes.KEY_J: 'J',
-    ecodes.KEY_K: 'K', ecodes.KEY_L: 'L', ecodes.KEY_M: 'M', ecodes.KEY_N: 'N', ecodes.KEY_O: 'O',
-    ecodes.KEY_P: 'P', ecodes.KEY_Q: 'Q', ecodes.KEY_R: 'R', ecodes.KEY_S: 'S', ecodes.KEY_T: 'T',
-    ecodes.KEY_U: 'U', ecodes.KEY_V: 'V', ecodes.KEY_W: 'W', ecodes.KEY_X: 'X', ecodes.KEY_Y: 'Y',
-    ecodes.KEY_Z: 'Z',
-    # Add more mappings if your reader outputs other characters (e.g., lowercase, symbols)
-}
+# Mapping from evdev key codes to characters (simplified for typical RFID readers)
+# This might need expansion based on the specific RFID reader's output.
+# Common keys for numbers, letters, and enter.
+EVDEV_KEY_MAP = {} # Initialize as empty
+if EVDEV_AVAILABLE:
+    EVDEV_KEY_MAP = {
+        ecodes.KEY_0: '0', ecodes.KEY_1: '1', ecodes.KEY_2: '2', ecodes.KEY_3: '3', ecodes.KEY_4: '4',
+        ecodes.KEY_5: '5', ecodes.KEY_6: '6', ecodes.KEY_7: '7', ecodes.KEY_8: '8', ecodes.KEY_9: '9',
+        ecodes.KEY_A: 'A', ecodes.KEY_B: 'B', ecodes.KEY_C: 'C', ecodes.KEY_D: 'D', ecodes.KEY_E: 'E',
+        ecodes.KEY_F: 'F', ecodes.KEY_G: 'G', ecodes.KEY_H: 'H', ecodes.KEY_I: 'I', ecodes.KEY_J: 'J',
+        ecodes.KEY_K: 'K', ecodes.KEY_L: 'L', ecodes.KEY_M: 'M', ecodes.KEY_N: 'N', ecodes.KEY_O: 'O',
+        ecodes.KEY_P: 'P', ecodes.KEY_Q: 'Q', ecodes.KEY_R: 'R', ecodes.KEY_S: 'S', ecodes.KEY_T: 'T',
+        ecodes.KEY_U: 'U', ecodes.KEY_V: 'V', ecodes.KEY_W: 'W', ecodes.KEY_X: 'X', ecodes.KEY_Y: 'Y',
+        ecodes.KEY_Z: 'Z',
+        # Add more mappings if your reader outputs other characters (e.g., lowercase, symbols)
+    }
+else:
+    # If evdev is not available, we can still define some placeholder keys if any code
+    # directly tries to access EVDEV_KEY_MAP[ecodes.KEY_ENTER] or similar with the mock ecodes.
+    # However, the main issue is accessing attributes that don't exist on the mock ecodes object itself.
+    # The current EVDEV_KEY_MAP structure is fine being empty if evdev is not available, as it's used
+    # within evdev-specific code paths (_read_loop_evdev).
+    pass 
+
+logger = logging.getLogger(__name__)
 
 class RFIDService:
     def __init__(self, simulation_mode=False, 
