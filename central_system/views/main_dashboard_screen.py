@@ -1,27 +1,130 @@
 import sys
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, 
-    QTableWidgetItem, QHeaderView, QPushButton, QLineEdit, QComboBox, QGroupBox, QStackedWidget, QMessageBox
-)
-from PyQt5.QtGui import QFont, QColor, QPalette
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+import os
 import logging
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QLineEdit, QComboBox, QGroupBox, QDialog, QScrollArea, QFrame,
+    QSizePolicy, QGridLayout, QTextEdit, QSpacerItem, QMessageBox
+)
+from PyQt5.QtGui import QFont, QColor
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+
+# NU Color Palette (for dynamic parts if needed)
+NU_BLUE = "#003DA7"
+NU_GOLD = "#FDB813"
+STATUS_GREEN = "#2ECC71"
+STATUS_RED = "#E74C3C"
+STATUS_ORANGE = "#F39C12"
+STATUS_GRAY = "#95A5A6"
+DARK_GRAY_TEXT = "#34495E"
+MEDIUM_GRAY_TEXT = "#566573"
 
 # Placeholder for where faculty data will come from (controller/service)
 # from ..services import DatabaseService # For direct testing or if controller passes it
 
+# --- Consultation Request Dialog --- 
+class ConsultationRequestDialog(QDialog):
+    submit_consultation_request_data = pyqtSignal(dict)
+
+    def __init__(self, faculty_data, student_id, student_name, parent=None):
+        super().__init__(parent)
+        self.faculty_data = faculty_data
+        self.student_id = student_id
+        self.student_name = student_name
+        
+        self.setWindowTitle("Request Consultation")
+        self.setObjectName("consultationRequestDialog") # For QSS
+        self.setModal(True)
+        self.setMinimumWidth(450)
+        self._init_dialog_ui()
+
+    def _init_dialog_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(15)
+
+        group_box = QGroupBox(f"Requesting with: {self.faculty_data.get('name', 'N/A')}")
+        group_box_layout = QVBoxLayout(group_box)
+
+        form_layout = QGridLayout()
+        form_layout.setSpacing(10)
+
+        form_layout.addWidget(QLabel("Course Code (Optional):"), 0, 0)
+        self.course_code_input = QLineEdit()
+        self.course_code_input.setPlaceholderText("e.g., CS101")
+        form_layout.addWidget(self.course_code_input, 0, 1)
+
+        form_layout.addWidget(QLabel("Subject/Brief Reason:"), 1, 0)
+        self.subject_input = QLineEdit()
+        self.subject_input.setPlaceholderText("e.g., Help with Assignment 2")
+        form_layout.addWidget(self.subject_input, 1, 1)
+
+        form_layout.addWidget(QLabel("Details (Optional):"), 2, 0, Qt.AlignTop)
+        self.details_input = QTextEdit()
+        self.details_input.setPlaceholderText("More details about your query...")
+        self.details_input.setFixedHeight(80)
+        form_layout.addWidget(self.details_input, 2, 1)
+        
+        group_box_layout.addLayout(form_layout)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch(1)
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setObjectName("cancelModalButton")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_button)
+
+        self.submit_button = QPushButton("Submit Request")
+        self.submit_button.setObjectName("submitModalButton")
+        self.submit_button.clicked.connect(self._handle_submit)
+        button_layout.addWidget(self.submit_button)
+        group_box_layout.addLayout(button_layout)
+        
+        main_layout.addWidget(group_box)
+        self.setLayout(main_layout)
+
+    def _handle_submit(self):
+        if not self.student_id:
+            QMessageBox.warning(self, "Login Error", "Cannot submit request. Student not logged in properly.")
+            return
+        if not self.faculty_data or 'faculty_id' not in self.faculty_data:
+            QMessageBox.warning(self, "Faculty Error", "Faculty data is missing.")
+            return
+
+        course_code = self.course_code_input.text().strip()
+        subject = self.subject_input.text().strip()
+        details = self.details_input.toPlainText().strip()
+
+        if not subject:
+            QMessageBox.warning(self, "Input Error", "Please enter a subject for your consultation request.")
+            self.subject_input.setFocus()
+            return
+
+        request_data = {
+            "student_id": self.student_id,
+            "faculty_id": self.faculty_data['faculty_id'],
+            "faculty_ble_identifier": self.faculty_data.get('ble_identifier', ''),
+            "student_name": self.student_name,
+            "course_code": course_code,
+            "subject": subject,
+            "details": details
+        }
+        self.submit_consultation_request_data.emit(request_data)
+        self.accept() # Close dialog
+
+# --- Main Dashboard Screen --- 
 class MainDashboardScreen(QWidget):
     # Signals for UI interactions that need controller logic
     request_logout = pyqtSignal()
     request_faculty_data_refresh = pyqtSignal()
-    submit_consultation_request = pyqtSignal(dict) # faculty_id, course, subject, details
-    request_open_admin_panel = pyqtSignal() # New signal
+    request_open_admin_panel = pyqtSignal()
 
     def __init__(self, db_service_getter, parent_stacked_widget: QStackedWidget = None):
         super().__init__()
         self.parent_stacked_widget = parent_stacked_widget
         self.db_service_getter = db_service_getter # Function to get current DB service instance
         self.current_student_data = None # To store logged-in student info
+        self.faculty_cards = [] # To keep references if needed
 
         self.setWindowTitle("ConsultEase - Main Dashboard")
         self.init_ui()
@@ -165,7 +268,8 @@ class MainDashboardScreen(QWidget):
 
     def load_faculty_data(self):
         logging.info("MainDashboard: Attempting to load/refresh faculty data.")
-        db_service = self.db_service_getter() # Get current DB service instance
+        self._clear_faculty_cards()
+        db_service = self.db_service_getter()
         if not db_service:
             logging.error("MainDashboard: DatabaseService not available to load faculty data.")
             self.faculty_table.setRowCount(0) # Clear table
@@ -335,6 +439,15 @@ class MainDashboardScreen(QWidget):
             logging.error(f"Error populating department filter: {e}")
         finally:
             self.dept_filter_combo.blockSignals(False)
+
+    def _clear_faculty_cards(self):
+        for i in reversed(range(self.faculty_grid_layout.count())):
+            widget_to_remove = self.faculty_grid_layout.itemAt(i).widget()
+            if widget_to_remove:
+                self.faculty_grid_layout.removeWidget(widget_to_remove)
+                widget_to_remove.setParent(None)
+                widget_to_remove.deleteLater()
+        self.faculty_cards = []
 
 # Example of how to run this screen standalone (for testing)
 if __name__ == '__main__':

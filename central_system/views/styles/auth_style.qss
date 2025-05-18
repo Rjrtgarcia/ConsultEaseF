@@ -1,0 +1,67 @@
+QWidget {
+    font-family: Segoe UI, Arial, sans-serif; /* Fallback fonts */
+}
+
+AuthenticationScreen {
+    background-color: #F8F9FA; /* LIGHT_GRAY_BG */
+}
+
+#contentPanel {
+    background-color: #FFFFFF; /* WHITE_BG */
+    border-radius: 8px;
+    border: 1px solid #DDD;
+}
+
+#appTitleLabel {
+    font-size: 28pt;
+    font-weight: bold;
+    color: #003DA7; /* NU_BLUE */
+    padding-bottom: 0px;
+}
+
+#uniNameLabel {
+    font-size: 16pt;
+    color: #FDB813; /* NU_GOLD */
+    padding-top: 0px;
+}
+
+#promptLabel {
+    font-size: 12pt;
+    color: #34495E; /* DARK_GRAY_TEXT */
+}
+
+#rfidVisualizer {
+    border: 2px dashed #003DA7; /* NU_BLUE */
+    border-radius: 5px;
+    background-color: #F0F0F0;
+}
+
+#rfidPlaceholderLabel {
+    font-size: 10pt;
+    color: #AAB7B8; /* LIGHT_GRAY_TEXT */
+}
+
+#statusLabel {
+    font-size: 11pt;
+    font-weight: normal;
+    /* Color will be set dynamically in Python code */
+}
+
+#adminPanelButton {
+    background-color: #FDB813; /* NU_GOLD */
+    color: #003DA7; /* NU_BLUE */
+    font-size: 11pt;
+    font-weight: bold;
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: 1px solid #FDB813; /* NU_GOLD */
+}
+
+#adminPanelButton:hover {
+    background-color: #EAB308; /* Darker gold for hover */
+    border: 1px solid #DAA520;
+}
+
+#adminPanelButton:pressed {
+    background-color: #D4AF37; /* Even darker gold for pressed */
+} 
