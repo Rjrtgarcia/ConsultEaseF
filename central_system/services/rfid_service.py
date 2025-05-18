@@ -12,11 +12,38 @@ except ImportError:
     logging.warning("pyserial library not found. Real RFID reader functionality will be unavailable. Please install it: pip install pyserial")
 
 try:
+    import evdev
     from evdev import InputDevice, categorize, ecodes, KeyEvent
     EVDEV_AVAILABLE = True
 except ImportError:
     EVDEV_AVAILABLE = False
     logging.warning("evdev library not found. evdev RFID reader functionality will be unavailable.")
+
+# Mock evdev objects if not available, to allow basic class definition
+# This helps in environments where evdev cannot be installed (e.g., Windows for development)
+class InputDevice:
+    def __init__(self, path):
+        logging.warning(f"evdev not available, RFID hardware functionality will be disabled. Mocking InputDevice for {path}.")
+        self.path = path
+    def read_loop(self):
+        logging.warning("evdev.read_loop() called on mock InputDevice. RFID hardware disabled.")
+        # Simulate a long sleep to prevent tight loop in mock usage if not handled carefully
+        while True:
+            time.sleep(1)
+            yield None # Yield None to avoid breaking the loop structure
+    def close(self):
+        pass
+    def grab(self):
+        pass
+    def ungrab(self):
+        pass
+class ecodes:
+    KEY_ENTER = 0 # Placeholder
+    EV_KEY = 0    # Placeholder
+class KeyEvent:
+    key_down = 1  # Placeholder value for key down event type
+def categorize(event):
+    return event # Placeholder
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,9 +65,12 @@ EVDEV_KEY_MAP = {
     ecodes.KEY_0: '0', ecodes.KEY_1: '1', ecodes.KEY_2: '2', ecodes.KEY_3: '3', ecodes.KEY_4: '4',
     ecodes.KEY_5: '5', ecodes.KEY_6: '6', ecodes.KEY_7: '7', ecodes.KEY_8: '8', ecodes.KEY_9: '9',
     ecodes.KEY_A: 'A', ecodes.KEY_B: 'B', ecodes.KEY_C: 'C', ecodes.KEY_D: 'D', ecodes.KEY_E: 'E',
-    ecodes.KEY_F: 'F', # Add more letters if your tags use them (G-Z)
-    # Some readers might use numpad keys for hex, e.g. KEY_KP0-KEY_KP9, KEY_KPA-KEY_KPF
-    # KEY_ENTER or KEY_KPENTER is often the delimiter.
+    ecodes.KEY_F: 'F', ecodes.KEY_G: 'G', ecodes.KEY_H: 'H', ecodes.KEY_I: 'I', ecodes.KEY_J: 'J',
+    ecodes.KEY_K: 'K', ecodes.KEY_L: 'L', ecodes.KEY_M: 'M', ecodes.KEY_N: 'N', ecodes.KEY_O: 'O',
+    ecodes.KEY_P: 'P', ecodes.KEY_Q: 'Q', ecodes.KEY_R: 'R', ecodes.KEY_S: 'S', ecodes.KEY_T: 'T',
+    ecodes.KEY_U: 'U', ecodes.KEY_V: 'V', ecodes.KEY_W: 'W', ecodes.KEY_X: 'X', ecodes.KEY_Y: 'Y',
+    ecodes.KEY_Z: 'Z',
+    # Add more mappings if your reader outputs other characters (e.g., lowercase, symbols)
 }
 
 class RFIDService:

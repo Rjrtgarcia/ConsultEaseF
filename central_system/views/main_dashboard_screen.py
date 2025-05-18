@@ -119,10 +119,10 @@ class MainDashboardScreen(QWidget):
     request_faculty_data_refresh = pyqtSignal()
     request_open_admin_panel = pyqtSignal()
 
-    def __init__(self, db_service_getter, parent_stacked_widget: QStackedWidget = None):
-        super().__init__()
-        self.parent_stacked_widget = parent_stacked_widget
-        self.db_service_getter = db_service_getter # Function to get current DB service instance
+    def __init__(self, db_service_getter, parent=None):
+        super().__init__(parent)
+        self.setObjectName("mainDashboardScreen") # For QSS root styling
+        self.db_service_getter = db_service_getter
         self.current_student_data = None # To store logged-in student info
         self.faculty_cards = [] # To keep references if needed
 
